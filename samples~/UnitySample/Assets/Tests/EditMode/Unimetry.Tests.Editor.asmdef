@@ -1,0 +1,21 @@
+{
+  "name": "Unimetry.Tests.Editor",
+  "rootNamespace": "Unimetry.Tests",
+  "references": [
+    "Unimetry.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "noEngineReferences": false
+}
