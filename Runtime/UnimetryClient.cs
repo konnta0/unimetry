@@ -40,6 +40,7 @@ namespace Unimetry
 
             options.Validate();
 
+            UnimetryRuntime created;
             lock (Gate)
             {
                 if (runtime != null)
@@ -47,9 +48,22 @@ namespace Unimetry
                     throw new InvalidOperationException("Unimetry is already initialized.");
                 }
 
-                runtime = new UnimetryRuntime(options);
-                runtime.Start();
+                created = new UnimetryRuntime(options);
+                created.Start();
+                Volatile.Write(ref runtime, created);
             }
+
+            created.IngestPreviousCrashes();
+        }
+
+        /// <summary>
+        /// Records a breadcrumb for the next native-crash artifact.
+        /// Does nothing when Unimetry is not initialized or <see cref="UnimetryOptions.CaptureNativeCrashes"/> is false.
+        /// </summary>
+        /// <param name="message">Short description. Newlines are replaced with spaces and the text is truncated.</param>
+        public static void AddBreadcrumb(string message)
+        {
+            Volatile.Read(ref runtime)?.AddBreadcrumb(message);
         }
 
         /// <summary>
@@ -81,10 +95,11 @@ namespace Unimetry
         {
             lock (Gate)
             {
-                if (runtime != null)
+                var current = runtime;
+                Volatile.Write(ref runtime, null);
+                if (current != null)
                 {
-                    runtime.Dispose();
-                    runtime = null;
+                    current.Dispose();
                 }
                 else
                 {

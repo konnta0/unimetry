@@ -1,21 +1,23 @@
 # Architecture
 
-## レイヤー分離
+**English** | [日本語](ARCHITECTURE.ja.md)
 
-Unimetry は次の 4 層に分かれています。
+## Layering
 
-1. **Capture** — Unity / .NET イベントを `CapturedError` に正規化
-2. **Queue** — 送信失敗時の永続化、プロセス再起動後の再送
-3. **Mapping** — OTel Logs / Traces JSON (OTLP/HTTP) への変換
-4. **Export** — `UnityWebRequest` による HTTP POST
+Unimetry is split into four layers.
 
-OpenTelemetry .NET SDK を使わない理由:
+1. **Capture** — normalize Unity / .NET events into `CapturedError`
+2. **Queue** — persist failed sends and retry them after process restart
+3. **Mapping** — convert to OTel Logs / Traces JSON (OTLP/HTTP)
+4. **Export** — HTTP POST via `UnityWebRequest`
 
-- Unity の IL2CPP / Mono 環境で SDK 全体が動作しない、またはサイズ・依存が大きい
-- 必要なのは **Logs + 限定的 Traces** のみ
-- OTLP/HTTP JSON は Collector が標準サポート
+Reasons this package does not use the OpenTelemetry .NET SDK:
 
-## データフロー
+- The full SDK does not run reliably on Unity IL2CPP / Mono, or it is too large and pulls in too many dependencies
+- The signals this library needs are **Logs plus a narrow slice of Traces**
+- Collectors support OTLP/HTTP JSON out of the box
+
+## Data flow
 
 ```mermaid
 sequenceDiagram
@@ -38,16 +40,16 @@ sequenceDiagram
     end
 ```
 
-## なぜ Log と Trace の両方か
+## Why both Logs and Traces
 
-| Signal | 用途 |
+| Signal | Role |
 | --- | --- |
-| **Logs** | 例外本文、stacktrace 検索、ログ基盤 (Loki 等) との統合 |
-| **Traces** | APM ビューでの error span、将来の gameplay span との親子関係 |
+| **Logs** | Exception body, stacktrace search, and integration with log backends (Loki and others) |
+| **Traces** | Error spans in an APM view, and a parent/child relationship with future gameplay spans |
 
-v0.1 ではエラー 1 件につき独立した `trace_id` を生成します。Phase 3 で既存 span への attach に拡張します。
+In v0.1 each error gets its own `trace_id`. Phase 3 extends this so an error can attach to an existing span.
 
-## Collector 側の推奨 processor
+## Recommended Collector processors
 
 ```yaml
 processors:
@@ -59,7 +61,7 @@ processors:
         action: insert
 ```
 
-クラッシュ (Phase 2) 用:
+For crashes (Phase 2):
 
 ```yaml
 exporters:
@@ -67,10 +69,11 @@ exporters:
     path: ./crash-artifacts
 ```
 
-## 拡張ポイント
+## Extension points
 
-- `UnimetryOptions.Sanitizer` — 送信前 redaction
-- `UnimetryOptions.ResourceAttributes` — `game.session_id` 等
-- `UnimetryOptions.Headers` — API gateway 認証
-- `UnimetryOptions.WithConsoleLog` / `WithLog` — エラーログと Event をユーザーのロガーへ複製
-- `UnimetryEvent` — 開始と終了を持つ OTel Event。`[Event]` は Editor の IL Post Processor が織る
+- `UnimetryOptions.Sanitizer` — redact payloads before send
+- `UnimetryOptions.ResourceAttributes` — extra resource attributes such as `game.session_id`
+- `UnimetryOptions.Headers` — API gateway authentication
+- `UnimetryOptions.WithConsoleLog` / `WithLog` — copy error logs and events to the user's logger
+- `UnimetryEvent` — an OTel event with a start and an end. `[Event]` is woven by the Editor IL Post Processor
+- `CaptureNativeCrashes` / `AddBreadcrumb` — Windows player native crashes, uploaded on the next launch as `unimetry.record_type=crash`

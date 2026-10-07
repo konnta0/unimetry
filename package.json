@@ -3,7 +3,12 @@
   "displayName": "Unimetry",
   "version": "0.1.0",
   "unity": "2021.3",
-  "description": "Unity crash, error, and event telemetry exported as OpenTelemetry logs and traces over OTLP/HTTP.",
+  "description": "Unity crash, error, event, trace, and metrics telemetry exported as OpenTelemetry over OTLP/HTTP.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/konnta0/unimetry.git"
+  },
+  "documentationUrl": "https://github.com/konnta0/unimetry#readme",
   "dependencies": {
     "com.unity.nuget.mono-cecil": "1.11.4"
   },

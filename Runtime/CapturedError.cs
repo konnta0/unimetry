@@ -36,6 +36,9 @@ namespace Unimetry
 
         /// <summary>Explicit call to <see cref="UnimetryClient.Report"/>.</summary>
         Manual = 3,
+
+        /// <summary>Native crash artifact recovered on a later launch.</summary>
+        NativeCrash = 4,
     }
 
     /// <summary>

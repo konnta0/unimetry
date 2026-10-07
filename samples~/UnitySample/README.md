@@ -1,42 +1,44 @@
 # Unity Sample Project
 
-Unimetry の動作確認用 Unity プロジェクトです。
+**English** | [日本語](README.ja.md)
 
-## 前提
+A Unity project for checking that Unimetry works.
 
-- Unity **2021.3 LTS** 以降
-- ローカル package 参照: `Packages/manifest.json` → `"com.konnta0.unimetry": "file:../../"`
+## Requirements
 
-## 開き方
+- Unity **2021.3 LTS** or later
+- Local package reference: `Packages/manifest.json` → `"com.konnta0.unimetry": "file:../../"`
 
-1. Unity Hub で `samples~/UnitySample` を開く
-2. 初回 import 後、`Assets/UnimetrySample/UnimetrySampleBootstrap.cs` をシーン内の GameObject にアタッチ
-3. 任意: `samples/collector` の Collector を起動
+## Open the project
+
+1. Open `samples~/UnitySample` in Unity Hub
+2. After the first import, attach `Assets/UnimetrySample/UnimetrySampleBootstrap.cs` to a GameObject in the scene
+3. Optional: start the Collector in `samples/collector` ([README](../../samples/collector/README.md))
 
 ```bash
 cd samples/collector
 docker compose up
 ```
 
-## サンプル操作
+## Sample actions
 
 ### Play Mode
 
-- `UnimetrySampleBootstrap` が起動時に Unimetry を初期化
-- Inspector から `ReportSampleException` / `EmitSampleErrorLog` / `EmitSampleEvent` / `FlushNow` を呼び出し可能
+- `UnimetrySampleBootstrap` initializes Unimetry on startup
+- From the Inspector you can call `ReportSampleException`, `EmitSampleErrorLog`, `EmitSampleEvent`, and `FlushNow`
 
-### Editor Menu
+### Editor menu
 
 - `Unimetry/Sample/Initialize For Play Mode`
 - `Unimetry/Sample/Report Test Exception`
 - `Unimetry/Sample/Emit Test Error Log`
 - `Unimetry/Sample/Emit Test Event`
 
-## テスト
+## Tests
 
-EditMode tests は `Assets/Tests/EditMode` にあります。
+EditMode tests live in `Assets/Tests/EditMode`.
 
-### Unity Editor から
+### From the Unity Editor
 
 `Window > General > Test Runner > EditMode > Run All`
 
@@ -54,12 +56,14 @@ EditMode tests は `Assets/Tests/EditMode` にあります。
   -logFile /tmp/unimetry-test.log
 ```
 
-## テスト内容
+## What the tests cover
 
-| テスト | 内容 |
+| Test | Coverage |
 | --- | --- |
-| `OtlpJsonWriterTests` | OTLP JSON payload と semantic conventions |
-| `UtilitiesTests` | fingerprint / trace id / stack trace 整形 |
-| `PersistentQueueTests` | 永続キュー順序・trim・再キュー |
-| `UnimetryClientTests` | 初期化と手動 report |
-| `EventTests` | Event の開始/終了、タグ、コンソール出力、`[Event]` 織り込み |
+| `OtlpJsonWriterTests` | OTLP JSON payload and semantic conventions |
+| `UtilitiesTests` | Fingerprint, trace id, and stack trace formatting |
+| `PersistentQueueTests` | Persistent queue order, trim, and re-queue |
+| `UnimetryClientTests` | Initialization and manual report |
+| `EventTests` | Event start/end, tags, console output, and `[Event]` weaving |
+| `CrashTests` | Native-crash artifacts, breadcrumbs, and next-launch OTLP logs |
+| `RoadmapTests` | Trace context, gameplay spans, metrics JSON, and queue encryption |

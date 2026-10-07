@@ -11,6 +11,7 @@ namespace Unimetry.Internal
         private readonly OtlpExporter exporter;
         private readonly UnimetryOptions options;
         private readonly EventBuffer eventBuffer;
+        private readonly Action beforeFlush;
         private readonly EventRecord[] eventBatch;
         private CancellationTokenSource cancellationTokenSource;
         private UnimetryDispatcherBehaviour dispatcher;
@@ -18,17 +19,22 @@ namespace Unimetry.Internal
         private bool disposed;
         private float nextFlushTime;
         private int flushInProgress;
+        private float fpsSum;
+        private int fpsCount;
+        private float startupSeconds;
 
         public BackgroundFlusher(
             PersistentQueue queue,
             OtlpExporter exporter,
             UnimetryOptions options,
-            EventBuffer eventBuffer)
+            EventBuffer eventBuffer,
+            Action beforeFlush)
         {
             this.queue = queue;
             this.exporter = exporter;
             this.options = options;
             this.eventBuffer = eventBuffer;
+            this.beforeFlush = beforeFlush;
             eventBatch = new EventRecord[options.MaxBatchSize];
             for (var index = 0; index < eventBatch.Length; index++)
             {
@@ -44,6 +50,7 @@ namespace Unimetry.Internal
             }
 
             started = true;
+            startupSeconds = Time.realtimeSinceStartup;
             cancellationTokenSource = new CancellationTokenSource();
             nextFlushTime = Time.realtimeSinceStartup + (float)options.FlushInterval.TotalSeconds;
             EnsureDispatcher();
@@ -52,7 +59,14 @@ namespace Unimetry.Internal
 
         public void Tick()
         {
-            if (disposed || Time.realtimeSinceStartup < nextFlushTime)
+            if (disposed)
+            {
+                return;
+            }
+
+            beforeFlush?.Invoke();
+            SampleFrame();
+            if (Time.realtimeSinceStartup < nextFlushTime)
             {
                 return;
             }
@@ -70,6 +84,8 @@ namespace Unimetry.Internal
 
             try
             {
+                beforeFlush?.Invoke();
+                await ExportMetricsAsync(cancellationToken).ConfigureAwait(true);
                 while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -125,6 +141,51 @@ namespace Unimetry.Internal
                 }
 
                 dispatcher = null;
+            }
+        }
+
+        private void SampleFrame()
+        {
+            if (!options.CaptureMetrics)
+            {
+                return;
+            }
+
+            var delta = Time.unscaledDeltaTime;
+            if (delta <= 0f)
+            {
+                return;
+            }
+
+            fpsSum += 1f / delta;
+            fpsCount++;
+        }
+
+        private async Task ExportMetricsAsync(CancellationToken cancellationToken)
+        {
+            if (!options.CaptureMetrics)
+            {
+                return;
+            }
+
+            var frames = double.NaN;
+            if (fpsCount > 0)
+            {
+                frames = fpsSum / fpsCount;
+                fpsSum = 0f;
+                fpsCount = 0;
+            }
+
+            var payload = OtlpJsonWriter.BuildMetricsPayload(
+                options,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_000_000L,
+                frames,
+                GC.GetTotalMemory(false),
+                startupSeconds);
+            var sent = await exporter.ExportMetricsAsync(payload, cancellationToken).ConfigureAwait(true);
+            if (!sent)
+            {
+                Debug.LogWarning("Unimetry metrics export failed.");
             }
         }
 

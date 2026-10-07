@@ -17,6 +17,21 @@ namespace Unimetry.Internal
         public string SpanId;
         public long CapturedAtUnixNano;
         public bool IncludeSpan;
+        public string RecordType;
+        public string Signal;
+        public string Registers;
+        public string Breadcrumbs;
+        public string DeviceModel;
+        public string OsType;
+        public string BuildId;
+        public string MinidumpFile;
+        public int MinidumpBytes;
+        public string SpanName;
+        public string ParentSpanId;
+        public string Baggage;
+        public int SpanStatusCode;
+        public long StartUnixNano;
+        public bool SkipLog;
 
         public static PendingExport FromCapturedError(CapturedError capturedError, bool includeSpan)
         {

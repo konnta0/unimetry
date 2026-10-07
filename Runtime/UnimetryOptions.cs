@@ -81,6 +81,11 @@ namespace Unimetry
         public bool CaptureEvents { get; set; } = true;
 
         /// <summary>
+        /// When true, flush exports FPS, managed memory, and startup duration as OTLP gauges.
+        /// </summary>
+        public bool CaptureMetrics { get; set; } = true;
+
+        /// <summary>
         /// Maximum number of completed events retained in memory. Additional events are counted and dropped.
         /// </summary>
         public int MaxEventBuffer { get; set; } = 1024;
@@ -89,6 +94,34 @@ namespace Unimetry
         /// Optional writer invoked for captured errors and completed events.
         /// </summary>
         public UnimetryLogWriter LogWriter { get; set; }
+
+        /// <summary>
+        /// When true, Windows standalone players record native crashes and upload them on the next launch.
+        /// Leave this false until the game's own consent UI allows crash collection.
+        /// A launch with this set to false deletes crash artifacts and breadcrumb files left on disk.
+        /// </summary>
+        public bool CaptureNativeCrashes { get; set; }
+
+        /// <summary>
+        /// When true, a Windows native crash also writes a minidump next to the crash artifact.
+        /// The dump is size-capped and is not embedded in the OTLP payload.
+        /// </summary>
+        public bool CaptureMinidumps { get; set; }
+
+        /// <summary>
+        /// Maximum minidump size in bytes. Larger dumps are discarded. The default is 4 MiB and the maximum is 32 MiB.
+        /// </summary>
+        public int MaxMinidumpBytes { get; set; } = 4 * 1024 * 1024;
+
+        /// <summary>
+        /// Maximum number of breadcrumbs kept for the next native crash. Valid range is 1 through 256.
+        /// </summary>
+        public int BreadcrumbCapacity { get; set; } = 64;
+
+        /// <summary>
+        /// Breadcrumbs older than this window are dropped. The default is 30 seconds.
+        /// </summary>
+        public TimeSpan BreadcrumbWindow { get; set; } = TimeSpan.FromSeconds(30);
 
         /// <summary>
         /// Sends captured errors and events to <see cref="UnityEngine.Debug.unityLogger"/>,
@@ -142,6 +175,21 @@ namespace Unimetry
             if (MaxEventBuffer <= 0)
             {
                 throw new InvalidOperationException("MaxEventBuffer must be greater than zero.");
+            }
+
+            if (BreadcrumbCapacity <= 0 || BreadcrumbCapacity > 256)
+            {
+                throw new InvalidOperationException("BreadcrumbCapacity must be from 1 through 256.");
+            }
+
+            if (BreadcrumbWindow <= TimeSpan.Zero)
+            {
+                throw new InvalidOperationException("BreadcrumbWindow must be greater than zero.");
+            }
+
+            if (MaxMinidumpBytes <= 0 || MaxMinidumpBytes > 32 * 1024 * 1024)
+            {
+                throw new InvalidOperationException("MaxMinidumpBytes must be from 1 through 33554432.");
             }
         }
     }

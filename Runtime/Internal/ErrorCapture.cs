@@ -9,12 +9,12 @@ namespace Unimetry.Internal
     internal sealed class ErrorCapture : IDisposable
     {
         private readonly UnimetryOptions options;
-        private readonly Action<CapturedError> onCaptured;
+        private readonly Action<CapturedError, string> onCaptured;
         private readonly HashSet<string> recentFingerprints = new();
         private readonly object dedupeGate = new();
         private bool started;
 
-        public ErrorCapture(UnimetryOptions options, Action<CapturedError> onCaptured)
+        public ErrorCapture(UnimetryOptions options, Action<CapturedError, string> onCaptured)
         {
             this.options = options;
             this.onCaptured = onCaptured;
@@ -45,9 +45,10 @@ namespace Unimetry.Internal
                 CapturedErrorSeverity.Exception,
                 CapturedErrorSource.Manual,
                 exception,
-                false);
+                false,
+                out var parentSpanId);
 
-            Publish(captured);
+            Publish(captured, parentSpanId);
         }
 
         public void Dispose()
@@ -88,9 +89,10 @@ namespace Unimetry.Internal
                 CapturedErrorSource.UnityLog,
                 null,
                 false,
+                out var parentSpanId,
                 stackTrace);
 
-            Publish(captured);
+            Publish(captured, parentSpanId);
         }
 
         private void HandleUnhandledException(object sender, UnhandledExceptionEventArgs eventArgs)
@@ -102,9 +104,10 @@ namespace Unimetry.Internal
                 CapturedErrorSeverity.Fatal,
                 CapturedErrorSource.UnhandledException,
                 exception,
-                eventArgs.IsTerminating);
+                eventArgs.IsTerminating,
+                out var parentSpanId);
 
-            Publish(captured, bypassDedupe: true);
+            Publish(captured, parentSpanId, bypassDedupe: true);
         }
 
         private void HandleUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs eventArgs)
@@ -115,10 +118,11 @@ namespace Unimetry.Internal
                 CapturedErrorSeverity.Exception,
                 CapturedErrorSource.UnobservedTaskException,
                 exception,
-                false);
+                false,
+                out var parentSpanId);
 
             eventArgs.SetObserved();
-            Publish(captured);
+            Publish(captured, parentSpanId);
         }
 
         private CapturedError BuildCapturedError(
@@ -127,6 +131,7 @@ namespace Unimetry.Internal
             CapturedErrorSource source,
             Exception exception,
             bool isTerminating,
+            out string parentSpanId,
             string stackTraceOverride = null)
         {
             var exceptionType = exception?.GetType().FullName ?? string.Empty;
@@ -134,6 +139,8 @@ namespace Unimetry.Internal
             var thread = Thread.CurrentThread;
             var traceId = IdGenerator.CreateTraceId();
             var spanId = IdGenerator.CreateSpanId();
+            parentSpanId = string.Empty;
+            TraceContext.ApplyToError(ref traceId, ref parentSpanId);
             var fingerprint = IdGenerator.CreateFingerprint(exceptionType, message, stackTrace);
 
             return new CapturedError(
@@ -150,14 +157,14 @@ namespace Unimetry.Internal
                 DateTimeOffset.UtcNow);
         }
 
-        private void Publish(CapturedError captured, bool bypassDedupe = false)
+        private void Publish(CapturedError captured, string parentSpanId, bool bypassDedupe = false)
         {
             if (!bypassDedupe && ShouldDropDuplicate(captured.Fingerprint))
             {
                 return;
             }
 
-            onCaptured?.Invoke(captured);
+            onCaptured?.Invoke(captured, parentSpanId ?? string.Empty);
         }
 
         private bool ShouldDropDuplicate(string fingerprint)

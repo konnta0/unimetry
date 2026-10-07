@@ -4,15 +4,31 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+processors:
+  batch:
+    timeout: 5s
+
 exporters:
   debug:
     verbosity: detailed
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  file/crash:
+    path: /var/log/unimetry/logs.json
 
 service:
   pipelines:
     logs:
       receivers: [otlp]
-      exporters: [debug]
+      processors: [batch]
+      exporters: [debug, file/crash]
     traces:
       receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
       exporters: [debug]

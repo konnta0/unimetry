@@ -13,6 +13,7 @@ namespace Unimetry.Internal
         private readonly UnimetryOptions options;
         private readonly string logsEndpoint;
         private readonly string tracesEndpoint;
+        private readonly string metricsEndpoint;
 
         public OtlpExporter(UnimetryOptions options)
         {
@@ -20,6 +21,17 @@ namespace Unimetry.Internal
             var endpoint = options.Endpoint.TrimEnd('/');
             logsEndpoint = endpoint + "/v1/logs";
             tracesEndpoint = endpoint + "/v1/traces";
+            metricsEndpoint = endpoint + "/v1/metrics";
+        }
+
+        public Task<bool> ExportMetricsAsync(string payload, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(payload))
+            {
+                return Task.FromResult(true);
+            }
+
+            return SendAsync(metricsEndpoint, payload, cancellationToken);
         }
 
         public Task<bool> ExportAsync(IReadOnlyList<PendingExport> items, CancellationToken cancellationToken)
@@ -34,16 +46,31 @@ namespace Unimetry.Internal
             CancellationToken cancellationToken)
         {
             var errorCount = items == null ? 0 : items.Count;
-            if (errorCount == 0 && eventCount <= 0)
+            var logCount = 0;
+            if (items != null)
+            {
+                for (var index = 0; index < items.Count; index++)
+                {
+                    if (!items[index].SkipLog)
+                    {
+                        logCount++;
+                    }
+                }
+            }
+
+            if (logCount == 0 && eventCount <= 0 && errorCount == 0)
             {
                 return true;
             }
 
-            var logsPayload = OtlpJsonWriter.BuildLogsPayload(items, events, eventCount, options);
-            var logsSent = await SendAsync(logsEndpoint, logsPayload, cancellationToken).ConfigureAwait(false);
-            if (!logsSent)
+            if (logCount > 0 || eventCount > 0)
             {
-                return false;
+                var logsPayload = OtlpJsonWriter.BuildLogsPayload(items, events, eventCount, options);
+                var logsSent = await SendAsync(logsEndpoint, logsPayload, cancellationToken).ConfigureAwait(false);
+                if (!logsSent)
+                {
+                    return false;
+                }
             }
 
             var hasSpans = false;

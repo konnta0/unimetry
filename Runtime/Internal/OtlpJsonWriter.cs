@@ -81,19 +81,26 @@ namespace Unimetry.Internal
                 eventCount = events == null ? 0 : events.Length;
             }
 
+            var writtenLogs = 0;
             for (var index = 0; index < errorCount; index++)
             {
-                if (index > 0)
+                if (items[index].SkipLog)
+                {
+                    continue;
+                }
+
+                if (writtenLogs > 0)
                 {
                     builder.Append(',');
                 }
 
                 AppendLogRecord(builder, items[index]);
+                writtenLogs++;
             }
 
             for (var index = 0; index < eventCount; index++)
             {
-                if (errorCount > 0 || index > 0)
+                if (writtenLogs > 0 || index > 0)
                 {
                     builder.Append(',');
                 }
@@ -183,27 +190,40 @@ namespace Unimetry.Internal
         private static void AppendSpan(StringBuilder builder, PendingExport item)
         {
             var endTime = item.CapturedAtUnixNano;
-            var startTime = Math.Max(0, endTime - 1_000_000L);
+            var startTime = item.StartUnixNano > 0 && item.StartUnixNano <= endTime
+                ? item.StartUnixNano
+                : Math.Max(0, endTime - 1_000_000L);
+            var statusCode = item.SpanStatusCode == 1 || item.SpanStatusCode == 2 ? item.SpanStatusCode : 2;
 
             builder.Append('{');
             builder.Append("\"traceId\":\"");
             builder.Append(item.TraceId);
             builder.Append("\",\"spanId\":\"");
             builder.Append(item.SpanId);
-            builder.Append("\",\"parentSpanId\":\"\",\"name\":\"unity.error\",\"kind\":1");
+            builder.Append("\",\"parentSpanId\":\"");
+            JsonEscaper.AppendEscaped(builder, item.ParentSpanId);
+            builder.Append("\",\"name\":\"");
+            JsonEscaper.AppendEscaped(builder, string.IsNullOrEmpty(item.SpanName) ? "unity.error" : item.SpanName);
+            builder.Append("\",\"kind\":1");
             builder.Append(",\"startTimeUnixNano\":\"");
             builder.Append(startTime.ToString(CultureInfo.InvariantCulture));
             builder.Append("\",\"endTimeUnixNano\":\"");
             builder.Append(endTime.ToString(CultureInfo.InvariantCulture));
-            builder.Append("\",\"status\":{\"code\":2,\"message\":\"");
+            builder.Append("\",\"status\":{\"code\":");
+            builder.Append(statusCode.ToString(CultureInfo.InvariantCulture));
+            builder.Append(",\"message\":\"");
             JsonEscaper.AppendEscaped(builder, item.Message);
             builder.Append("\"},\"attributes\":");
             AppendErrorAttributes(builder, item);
-            builder.Append(",\"events\":[{\"timeUnixNano\":\"");
-            builder.Append(endTime.ToString(CultureInfo.InvariantCulture));
-            builder.Append("\",\"name\":\"exception\",\"attributes\":");
-            AppendExceptionEventAttributes(builder, item);
-            builder.Append("}]");
+            if (statusCode != 1)
+            {
+                builder.Append(",\"events\":[{\"timeUnixNano\":\"");
+                builder.Append(endTime.ToString(CultureInfo.InvariantCulture));
+                builder.Append("\",\"name\":\"exception\",\"attributes\":");
+                AppendExceptionEventAttributes(builder, item);
+                builder.Append("}]");
+            }
+
             builder.Append('}');
         }
 
@@ -294,7 +314,98 @@ namespace Unimetry.Internal
             attributes.WriteString("exception.type", item.ExceptionType);
             attributes.WriteString("exception.message", item.Message);
             attributes.WriteString("exception.stacktrace", item.StackTrace);
+            AppendBaggage(attributes, item.Baggage);
+            if (string.Equals(item.RecordType, CrashRecord.Type, StringComparison.Ordinal))
+            {
+                attributes.WriteString("unimetry.record_type", CrashRecord.Type);
+                attributes.WriteString("crash.signal", item.Signal);
+                attributes.WriteString("crash.registers", item.Registers);
+                attributes.WriteString("crash.breadcrumbs", item.Breadcrumbs);
+                attributes.WriteString("device.model", item.DeviceModel);
+                attributes.WriteString("os.type", item.OsType);
+                attributes.WriteString("app.build_id", item.BuildId);
+                attributes.WriteString("crash.minidump_file", item.MinidumpFile);
+                if (item.MinidumpBytes > 0)
+                {
+                    attributes.WriteInt("crash.minidump_bytes", item.MinidumpBytes);
+                }
+            }
+
             attributes.Complete();
+        }
+
+        public static string BuildMetricsPayload(
+            UnimetryOptions options,
+            long timeUnixNano,
+            double framesPerSecond,
+            long usedBytes,
+            double startupSeconds)
+        {
+            var builder = new StringBuilder(1024);
+            builder.Append("{\"resourceMetrics\":[{\"resource\":{\"attributes\":");
+            AppendResourceAttributes(builder, options);
+            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.1.0\"},\"metrics\":[");
+            var written = 0;
+            if (!double.IsNaN(framesPerSecond) && !double.IsInfinity(framesPerSecond) && framesPerSecond >= 0)
+            {
+                AppendGauge(builder, "unity.fps", framesPerSecond, timeUnixNano, ref written);
+            }
+
+            if (usedBytes >= 0)
+            {
+                AppendGauge(builder, "unity.memory.used_bytes", usedBytes, timeUnixNano, ref written);
+            }
+
+            if (!double.IsNaN(startupSeconds) && startupSeconds >= 0)
+            {
+                AppendGauge(builder, "unity.startup.duration_s", startupSeconds, timeUnixNano, ref written);
+            }
+
+            builder.Append("]}]}]}");
+            return builder.ToString();
+        }
+
+        private static void AppendGauge(
+            StringBuilder builder,
+            string name,
+            double value,
+            long timeUnixNano,
+            ref int written)
+        {
+            if (written > 0)
+            {
+                builder.Append(',');
+            }
+
+            written++;
+            builder.Append("{\"name\":\"");
+            JsonEscaper.AppendEscaped(builder, name);
+            builder.Append("\",\"gauge\":{\"dataPoints\":[{\"timeUnixNano\":\"");
+            builder.Append(timeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append("\",\"asDouble\":");
+            builder.Append(value.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append("}]}}");
+        }
+
+        private static void AppendBaggage(AttributeWriter attributes, string baggage)
+        {
+            if (string.IsNullOrEmpty(baggage) || attributes == null)
+            {
+                return;
+            }
+
+            var lines = baggage.Split('\n');
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var line = lines[index];
+                var split = line.IndexOf('=');
+                if (split <= 0 || split >= line.Length - 1)
+                {
+                    continue;
+                }
+
+                attributes.WriteString(line.Substring(0, split), line.Substring(split + 1));
+            }
         }
 
         private static void AppendExceptionEventAttributes(StringBuilder builder, PendingExport item)

@@ -1,25 +1,30 @@
 # Unimetry
 
-Unity 向けのクラッシュ / エラー計装ライブラリ。管理例外と Unity ログを OpenTelemetry の **Logs** と **Traces** として解釈し、**OTLP/HTTP (JSON)** で Collector へ送信します。
+**English** | [日本語](README.ja.md)
 
-標準の OpenTelemetry .NET SDK に依存せず、Unity のランタイム制約（`Meter` 非対応、`DiagnosticSource` 限定など）を回避するため、最小限の OTLP エクスポーターを自前実装しています。
+A crash and error instrumentation library for Unity. It treats managed exceptions and Unity logs as OpenTelemetry **Logs** and **Traces**, and sends them to a Collector over **OTLP/HTTP (JSON)**.
 
-## 現状のスコープ (v0.1)
+It does not depend on the standard OpenTelemetry .NET SDK. A minimal OTLP exporter is implemented in this package so it can run under Unity's runtime limits (no `Meter`, limited `DiagnosticSource`, and similar constraints).
 
-| 対象 | 状態 |
+## Current scope (v0.1)
+
+| Area | Status |
 | --- | --- |
-| Unity `LogType.Error` / `Exception` / `Assert` | 対応 |
-| `AppDomain.UnhandledException` | 対応 |
-| `TaskScheduler.UnobservedTaskException` | 対応 |
-| 手動 `UnimetryClient.Report(...)` | 対応 |
-| `[Event]` / `UnimetryEvent.Begin` / `Start` / `Write` | 対応 |
-| OTLP Logs (`/v1/logs`) | 対応 |
-| OTLP Traces (`/v1/traces`, エラー span) | 対応 |
-| オフライン永続キュー + 再送 | 対応 |
-| ネイティブクラッシュ (IL2CPP / iOS / Android SIG*) | **未対応** (Phase 2) |
-| 既存 Trace コンテキストとの自動相関 | **未対応** (Phase 3) |
+| Unity `LogType.Error` / `Exception` / `Assert` | Supported |
+| `AppDomain.UnhandledException` | Supported |
+| `TaskScheduler.UnobservedTaskException` | Supported |
+| Manual `UnimetryClient.Report(...)` | Supported |
+| `[Event]` / `UnimetryEvent.Begin` / `Start` / `Write` | Supported |
+| OTLP Logs (`/v1/logs`) | Supported |
+| OTLP Traces (`/v1/traces`, error spans) | Supported |
+| Offline persistent queue + retry | Supported |
+| Native crashes on Windows players | Supported (opt-in, uploaded on the next launch) |
+| Native crashes on iOS, Android, and macOS | **Not supported** |
+| Automatic correlation with an existing trace context | **Not supported** (Phase 3) |
 
-## アーキテクチャ
+## Architecture
+
+Layering and data flow: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```
 Unity App
@@ -35,29 +40,29 @@ Unity App
    Jaeger / Tempo / Loki / SigNoz / etc.
 ```
 
-### OTel へのマッピング
+### Mapping to OTel
 
-| Unity イベント | OTel Logs | OTel Traces |
+| Unity event | OTel Logs | OTel Traces |
 | --- | --- | --- |
-| 例外 | `severityNumber=17/21`, `body=message` | `unity.error` span, `status=ERROR` |
-| 属性 | `exception.type`, `exception.message`, `exception.stacktrace`, `exception.escaped` | span attributes + `exception` event |
-| リソース | `service.name`, `service.version`, `deployment.environment` | 同上 |
+| Exception | `severityNumber=17/21`, `body=message` | `unity.error` span, `status=ERROR` |
+| Attributes | `exception.type`, `exception.message`, `exception.stacktrace`, `exception.escaped` | span attributes + `exception` event |
+| Resource | `service.name`, `service.version`, `deployment.environment` | same as Logs |
 
-`unimetry.source`, `unimetry.fingerprint` はライブラリ固有属性です。
+`unimetry.source` and `unimetry.fingerprint` are library-specific attributes.
 
-## インストール
+## Install
 
-### ローカル sample プロジェクト
+### Local sample project
 
 ```bash
 git clone https://github.com/konnta0/unimetry.git
 ```
 
-Unity Hub で `samples~/UnitySample` を開いてください。詳細は [samples~/UnitySample/README.md](samples~/UnitySample/README.md) を参照。
+Open `samples~/UnitySample` in Unity Hub. See [samples~/UnitySample/README.md](samples~/UnitySample/README.md).
 
-### 他プロジェクトへの組み込み
+### Add to another project
 
-1. このリポジトリを Unity プロジェクトの `Packages/manifest.json` に追加:
+1. Add this repository to the Unity project's `Packages/manifest.json`:
 
 ```json
 {
@@ -67,7 +72,7 @@ Unity Hub で `samples~/UnitySample` を開いてください。詳細は [sampl
 }
 ```
 
-2. 起動時に初期化:
+2. Initialize at startup:
 
 ```csharp
 using Unimetry;
@@ -82,7 +87,7 @@ UnimetryClient.Initialize(new UnimetryOptions
 }.WithConsoleLog());
 ```
 
-`WithConsoleLog()` はエラーログと Event を `Debug.unityLogger` に出します。ユーザーが差し替えたログハンドラをそのまま通ります。独自のロガーへ渡すときは `WithLog` を使います。
+`WithConsoleLog()` writes error logs and events through `Debug.unityLogger`, including a log handler the user has already installed. Use `WithLog` to forward them to your own logger.
 
 ```csharp
 options.WithLog(static (in UnimetryLogEntry entry) =>
@@ -93,7 +98,7 @@ options.WithLog(static (in UnimetryLogEntry entry) =>
 
 ## Event
 
-Event は OTLP Log の `eventName` 付きレコードです。`timeUnixNano` が開始、`observedTimeUnixNano` が終了、`unimetry.event.duration_ns` が経過時間です。未初期化、または `CaptureEvents = false` のとき、同期の `Begin` はアロケーションしません。
+An event is an OTLP log record with `eventName`. `timeUnixNano` is the start, `observedTimeUnixNano` is the end, and `unimetry.event.duration_ns` is the elapsed time. When the client is not initialized, or when `CaptureEvents = false`, synchronous `Begin` does not allocate.
 
 ```csharp
 [Event("match.load")]
@@ -113,21 +118,21 @@ using (var handle = UnimetryEvent.Start("match.load"))
 UnimetryEvent.Write("checkpoint.reached");
 ```
 
-`[Event]` は Unity の IL Post Processor が織ります。generic method、iterator、`async void`、local function は対象外で、警告を出してメソッドはそのまま残します。`UNIMETRY_DISABLE_EVENT_WEAVE` を定義すると織り込みを止めます。タグに使える型は `string`、`bool`、`int`、`long`、`double` です。
+`[Event]` is woven by Unity's IL Post Processor. Generic methods, iterators, `async void`, and local functions are left unchanged and produce a warning. Define `UNIMETRY_DISABLE_EVENT_WEAVE` to disable weaving. Tag types are `string`, `bool`, `int`, `long`, and `double`.
 
-高頻度の Event はディスクへ書かず、メモリ上のリングバッファから `/v1/logs` に送ります。溢れた分は捨てて件数だけ数えます。`Shutdown` の前に `FlushAsync` を呼ぶと、残っている Event を送れます。
+High-frequency events are not written to disk. They are sent to `/v1/logs` from an in-memory ring buffer. Overflow is dropped and only the drop count is kept. Call `FlushAsync` before `Shutdown` to send events that are still buffered.
 
-### 環境変数による自動初期化
+### Automatic initialization from environment variables
 
-| 変数 | 説明 |
+| Variable | Description |
 | --- | --- |
-| `UNIMETRY_OTLP_ENDPOINT` | 設定時のみ自動初期化 |
-| `UNIMETRY_SERVICE_NAME` | 省略時 `Application.productName` |
-| `UNIMETRY_SERVICE_VERSION` | 省略時 `Application.version` |
-| `UNIMETRY_DEPLOYMENT_ENVIRONMENT` | 省略時 `production` |
-| `UNIMETRY_ALLOW_INSECURE_TLS` | `1` / `true` で TLS 検証を無効化 |
+| `UNIMETRY_OTLP_ENDPOINT` | Auto-initialize only when this is set |
+| `UNIMETRY_SERVICE_NAME` | Defaults to `Application.productName` |
+| `UNIMETRY_SERVICE_VERSION` | Defaults to `Application.version` |
+| `UNIMETRY_DEPLOYMENT_ENVIRONMENT` | Defaults to `production` |
+| `UNIMETRY_ALLOW_INSECURE_TLS` | Set to `1` or `true` to disable TLS verification |
 
-## Collector 設定例
+## Example Collector config
 
 ```yaml
 receivers:
@@ -150,14 +155,42 @@ service:
       exporters: [debug]
 ```
 
-## ロードマップ
+## Native crashes
 
-詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。
+Windows standalone players can record a native crash and upload it on the next launch. Capture stays off until the game sets `CaptureNativeCrashes` after its own consent UI. iOS, Android, and macOS are not captured yet.
 
-- **Phase 2**: ネイティブクラッシュ (次回起動時送信用の minidump / tombstone 収集)
-- **Phase 3**: `Activity.Current` との相関、ゲームプレイ span 用 API
-- **Phase 4**: Metrics (FPS, memory) の OTLP export
+```csharp
+UnimetryClient.Initialize(new UnimetryOptions
+{
+    Endpoint = "http://localhost:4318",
+    ServiceName = "my-game",
+    CaptureNativeCrashes = true,
+    CaptureMinidumps = true,
+}.WithConsoleLog());
 
-## ライセンス
+UnimetryClient.AddBreadcrumb("entered match");
+```
+
+`AddBreadcrumb` keeps a short trail (last 30 seconds, 64 entries by default). It does nothing unless native crash capture is enabled. The unhandled-exception filter is installed only in Windows standalone players, not in the Editor. An unhandled native exception writes `persistentDataPath/unimetry/crashes/*.crash.json`. On the next launch, if capture is still enabled, Unimetry enqueues an OTLP log with `unimetry.record_type=crash`, `crash.signal`, `device.model`, `os.type`, and `app.build_id`. One `unity.crash` span is included when `ExportErrorSpans` is true.
+
+`CaptureMinidumps` writes a minidump beside the artifact, capped by `MaxMinidumpBytes` (default 4 MiB, maximum 32 MiB). The dump stays on disk and is not embedded in the OTLP payload. macOS and iOS players record `SIGSEGV`, `SIGBUS`, `SIGABRT`, `SIGILL`, and `SIGFPE` through the native helper in `Plugins/`. Android remains deferred. A launch that leaves capture disabled deletes leftover artifacts, minidumps, and the breadcrumb file. `Sanitizer` runs on the crash message, managed stack, and breadcrumb text before export.
+
+## Traces, baggage, and metrics
+
+```csharp
+UnimetryTrace.ExtractTraceParent(traceparentHeader);
+UnimetryTrace.SetBaggage("user.id", "player-1");
+using (UnimetryTrace.Start("match.load"))
+{
+}
+```
+
+`ExtractTraceParent` accepts a W3C `traceparent`. Where `Activity.Current` has a trace, errors use that trace id and parent span. Gameplay spans export as OTLP traces with status OK. Baggage is copied onto span attributes. `CaptureMetrics` (default on) exports `unity.fps`, `unity.memory.used_bytes`, and `unity.startup.duration_s` to `/v1/metrics`.
+
+The offline queue is encrypted with AES-256-CBC and HMAC-SHA256. The key file is `persistentDataPath/unimetry/offline.key`, next to the queue, so this stops casual reading of `queue.json` and does not protect a copy of the whole directory.
+
+Create `Assets/Resources/UnimetrySettings.asset` from **Project Settings > Unimetry**. If `UNIMETRY_OTLP_ENDPOINT` is unset, startup loads that asset. The sample Collector in `samples/collector` forwards traces to Jaeger at `http://localhost:16686`. OpenUPM can publish this repo from the root `package.json` (`com.konnta0.unimetry`).
+
+## License
 
 MIT

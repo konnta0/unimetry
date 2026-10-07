@@ -11,11 +11,14 @@ namespace Unimetry.Internal
         private readonly object gate = new();
         private readonly LinkedList<PendingExport> items = new();
         private readonly string storagePath;
+        private readonly string keyPath;
 
         public PersistentQueue(int maxQueueSize)
         {
             this.maxQueueSize = maxQueueSize;
-            storagePath = Path.Combine(Application.persistentDataPath, "unimetry", "queue.json");
+            var root = Path.Combine(Application.persistentDataPath, "unimetry");
+            storagePath = Path.Combine(root, "queue.json");
+            keyPath = Path.Combine(root, "offline.key");
             LoadFromDisk();
         }
 
@@ -101,7 +104,11 @@ namespace Unimetry.Internal
                     return;
                 }
 
-                var json = File.ReadAllText(storagePath);
+                var json = OfflineProtector.Unprotect(File.ReadAllBytes(storagePath), keyPath);
+                if (string.IsNullOrEmpty(json))
+                {
+                    return;
+                }
                 var envelope = JsonUtility.FromJson<PendingExportEnvelope>(json);
                 if (envelope?.Items == null)
                 {
@@ -148,7 +155,8 @@ namespace Unimetry.Internal
                     node = node.Next;
                 }
 
-                File.WriteAllText(storagePath, JsonUtility.ToJson(envelope));
+                var protectedBytes = OfflineProtector.Protect(JsonUtility.ToJson(envelope), keyPath);
+                File.WriteAllBytes(storagePath, protectedBytes);
             }
             catch (Exception exception)
             {
