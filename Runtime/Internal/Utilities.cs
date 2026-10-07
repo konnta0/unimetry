@@ -128,5 +128,19 @@ namespace Unimetry.Internal
                 _ => (17, "ERROR"),
             };
         }
+
+        public static (int Number, string Text) FromEventSeverity(int severityNumber)
+        {
+            return severityNumber switch
+            {
+                1 => (1, "TRACE"),
+                5 => (5, "DEBUG"),
+                9 => (9, "INFO"),
+                13 => (13, "WARN"),
+                17 => (17, "ERROR"),
+                21 => (21, "FATAL"),
+                _ => (9, "INFO"),
+            };
+        }
     }
 }

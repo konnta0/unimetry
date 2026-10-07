@@ -23,6 +23,9 @@ namespace Unimetry.Sample
         [SerializeField]
         private bool exportErrorSpans = true;
 
+        [SerializeField]
+        private bool consoleLog = true;
+
         private void Awake()
         {
             if (UnimetryClient.IsInitialized)
@@ -30,7 +33,7 @@ namespace Unimetry.Sample
                 return;
             }
 
-            UnimetryClient.Initialize(new UnimetryOptions
+            var options = new UnimetryOptions
             {
                 Endpoint = endpoint,
                 ServiceName = serviceName,
@@ -38,7 +41,13 @@ namespace Unimetry.Sample
                 DeploymentEnvironment = deploymentEnvironment,
                 AllowInsecureTls = allowInsecureTls,
                 ExportErrorSpans = exportErrorSpans,
-            });
+            };
+            if (consoleLog)
+            {
+                options.WithConsoleLog();
+            }
+
+            UnimetryClient.Initialize(options);
 
             Debug.Log("Unimetry sample initialized.");
         }
@@ -64,6 +73,15 @@ namespace Unimetry.Sample
         public void EmitSampleErrorLog()
         {
             Debug.LogError("Unimetry sample error log");
+        }
+
+        /// <summary>
+        /// Records a sample event, both around the method and at an explicit point inside it.
+        /// </summary>
+        [Event("sample.ping")]
+        public void EmitSampleEvent()
+        {
+            UnimetryEvent.Write("sample.ping.direct");
         }
 
         /// <summary>

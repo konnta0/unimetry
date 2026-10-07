@@ -30,6 +30,31 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void BuildLogsPayload_IncludesEventNameAndBothTimestamps()
+        {
+            var options = CreateOptions();
+            var events = new EventRecord[1];
+            events[0].Tags = new EventTag[EventBuffer.MaxTags];
+            events[0].Name = "player.jump";
+            events[0].StartUnixNano = 10;
+            events[0].EndUnixNano = 25;
+            events[0].SeverityNumber = (int)UnimetrySeverity.Info;
+            events[0].TagCount = 1;
+            events[0].Tags[0] = EventTag.FromInt("player.id", 7);
+
+            var payload = OtlpJsonWriter.BuildLogsPayload(new List<PendingExport>(), events, 1, options);
+
+            StringAssert.Contains("\"eventName\":\"player.jump\"", payload);
+            StringAssert.Contains("\"timeUnixNano\":\"10\"", payload);
+            StringAssert.Contains("\"observedTimeUnixNano\":\"25\"", payload);
+            StringAssert.Contains("\"unimetry.event.duration_ns\"", payload);
+            StringAssert.Contains("\"intValue\":\"15\"", payload);
+            StringAssert.Contains("\"player.id\"", payload);
+            StringAssert.Contains("\"intValue\":\"7\"", payload);
+            StringAssert.Contains("\"severityText\":\"INFO\"", payload);
+        }
+
+        [Test]
         public void BuildTracesPayload_IncludesErrorSpanAndExceptionEvent()
         {
             var options = CreateOptions();

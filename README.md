@@ -12,6 +12,7 @@ Unity 向けのクラッシュ / エラー計装ライブラリ。管理例外�
 | `AppDomain.UnhandledException` | 対応 |
 | `TaskScheduler.UnobservedTaskException` | 対応 |
 | 手動 `UnimetryClient.Report(...)` | 対応 |
+| `[Event]` / `UnimetryEvent.Begin` / `Start` / `Write` | 対応 |
 | OTLP Logs (`/v1/logs`) | 対応 |
 | OTLP Traces (`/v1/traces`, エラー span) | 対応 |
 | オフライン永続キュー + 再送 | 対応 |
@@ -78,8 +79,43 @@ UnimetryClient.Initialize(new UnimetryOptions
     ServiceVersion = Application.version,
     DeploymentEnvironment = "development",
     AllowInsecureTls = true,
+}.WithConsoleLog());
+```
+
+`WithConsoleLog()` はエラーログと Event を `Debug.unityLogger` に出します。ユーザーが差し替えたログハンドラをそのまま通ります。独自のロガーへ渡すときは `WithLog` を使います。
+
+```csharp
+options.WithLog(static (in UnimetryLogEntry entry) =>
+{
+    MyLogger.Info(entry.Name);
 });
 ```
+
+## Event
+
+Event は OTLP Log の `eventName` 付きレコードです。`timeUnixNano` が開始、`observedTimeUnixNano` が終了、`unimetry.event.duration_ns` が経過時間です。未初期化、または `CaptureEvents = false` のとき、同期の `Begin` はアロケーションしません。
+
+```csharp
+[Event("match.load")]
+public async Task LoadAsync([EventTag("match.region")] string region)
+{
+}
+
+using (UnimetryEvent.Begin("player.jump"))
+{
+}
+
+using (var handle = UnimetryEvent.Start("match.load"))
+{
+    await LoadAsync(region);
+}
+
+UnimetryEvent.Write("checkpoint.reached");
+```
+
+`[Event]` は Unity の IL Post Processor が織ります。generic method、iterator、`async void`、local function は対象外で、警告を出してメソッドはそのまま残します。`UNIMETRY_DISABLE_EVENT_WEAVE` を定義すると織り込みを止めます。タグに使える型は `string`、`bool`、`int`、`long`、`double` です。
+
+高頻度の Event はディスクへ書かず、メモリ上のリングバッファから `/v1/logs` に送ります。溢れた分は捨てて件数だけ数えます。`Shutdown` の前に `FlushAsync` を呼ぶと、残っている Event を送れます。
 
 ### 環境変数による自動初期化
 

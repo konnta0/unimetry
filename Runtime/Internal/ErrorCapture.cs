@@ -65,6 +65,11 @@ namespace Unimetry.Internal
 
         private void HandleLogMessage(string condition, string stackTrace, LogType type)
         {
+            if (LogDispatch.IsDispatching)
+            {
+                return;
+            }
+
             if (type != LogType.Error && type != LogType.Exception && type != LogType.Assert)
             {
                 return;

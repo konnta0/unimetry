@@ -27,6 +27,16 @@ namespace Unimetry.Sample.Editor
             Debug.LogError("Unimetry editor menu test error log");
         }
 
+        [MenuItem("Unimetry/Sample/Emit Test Event")]
+        private static void EmitTestEvent()
+        {
+            EnsureInitialized();
+            using (var scope = UnimetryEvent.Begin("sample.menu"))
+            {
+                scope.SetTag("source", "editor-menu");
+            }
+        }
+
         private static void EnsureInitialized()
         {
             if (UnimetryClient.IsInitialized)

@@ -27,7 +27,9 @@ sequenceDiagram
     participant Col as OTel Collector
 
     Unity->>Capture: log / unhandled exception
+    Unity->>Capture: UnimetryEvent start / end
     Capture->>Queue: PendingExport
+    Capture->>Flusher: in-memory events
     loop every FlushInterval
         Flusher->>Queue: DequeueBatch
         Flusher->>OTLP: ExportAsync
@@ -70,3 +72,5 @@ exporters:
 - `UnimetryOptions.Sanitizer` — 送信前 redaction
 - `UnimetryOptions.ResourceAttributes` — `game.session_id` 等
 - `UnimetryOptions.Headers` — API gateway 認証
+- `UnimetryOptions.WithConsoleLog` / `WithLog` — エラーログと Event をユーザーのロガーへ複製
+- `UnimetryEvent` — 開始と終了を持つ OTel Event。`[Event]` は Editor の IL Post Processor が織る

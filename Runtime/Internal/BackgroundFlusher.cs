@@ -10,6 +10,8 @@ namespace Unimetry.Internal
         private readonly PersistentQueue queue;
         private readonly OtlpExporter exporter;
         private readonly UnimetryOptions options;
+        private readonly EventBuffer eventBuffer;
+        private readonly EventRecord[] eventBatch;
         private CancellationTokenSource cancellationTokenSource;
         private UnimetryDispatcherBehaviour dispatcher;
         private bool started;
@@ -17,11 +19,21 @@ namespace Unimetry.Internal
         private float nextFlushTime;
         private int flushInProgress;
 
-        public BackgroundFlusher(PersistentQueue queue, OtlpExporter exporter, UnimetryOptions options)
+        public BackgroundFlusher(
+            PersistentQueue queue,
+            OtlpExporter exporter,
+            UnimetryOptions options,
+            EventBuffer eventBuffer)
         {
             this.queue = queue;
             this.exporter = exporter;
             this.options = options;
+            this.eventBuffer = eventBuffer;
+            eventBatch = new EventRecord[options.MaxBatchSize];
+            for (var index = 0; index < eventBatch.Length; index++)
+            {
+                eventBatch[index].Tags = new EventTag[EventBuffer.MaxTags];
+            }
         }
 
         public void Start()
@@ -63,16 +75,22 @@ namespace Unimetry.Internal
                     cancellationToken.ThrowIfCancellationRequested();
 
                     var batch = queue.DequeueBatch(options.MaxBatchSize);
-                    if (batch.Count == 0)
+                    var eventCount = eventBuffer == null ? 0 : eventBuffer.CopyOldest(eventBatch);
+                    if (batch.Count == 0 && eventCount == 0)
                     {
                         return;
                     }
 
-                    var exported = await exporter.ExportAsync(batch, cancellationToken).ConfigureAwait(true);
+                    var exported = await exporter.ExportAsync(batch, eventBatch, eventCount, cancellationToken).ConfigureAwait(true);
                     if (!exported)
                     {
                         queue.RequeueFront(batch);
                         return;
+                    }
+
+                    if (eventCount > 0)
+                    {
+                        eventBuffer.Commit(eventCount);
                     }
                 }
             }

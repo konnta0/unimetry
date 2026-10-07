@@ -75,13 +75,21 @@ namespace Unimetry
 
         /// <summary>
         /// Stops capture hooks and releases runtime resources.
+        /// Events still sitting in memory are discarded. Call <see cref="FlushAsync"/> first to export them.
         /// </summary>
         public static void Shutdown()
         {
             lock (Gate)
             {
-                runtime?.Dispose();
-                runtime = null;
+                if (runtime != null)
+                {
+                    runtime.Dispose();
+                    runtime = null;
+                }
+                else
+                {
+                    Internal.EventPipeline.Configure(null, null, false);
+                }
             }
         }
 

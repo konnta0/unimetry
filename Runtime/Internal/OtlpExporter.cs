@@ -22,14 +22,24 @@ namespace Unimetry.Internal
             tracesEndpoint = endpoint + "/v1/traces";
         }
 
-        public async Task<bool> ExportAsync(IReadOnlyList<PendingExport> items, CancellationToken cancellationToken)
+        public Task<bool> ExportAsync(IReadOnlyList<PendingExport> items, CancellationToken cancellationToken)
         {
-            if (items == null || items.Count == 0)
+            return ExportAsync(items, null, 0, cancellationToken);
+        }
+
+        public async Task<bool> ExportAsync(
+            IReadOnlyList<PendingExport> items,
+            EventRecord[] events,
+            int eventCount,
+            CancellationToken cancellationToken)
+        {
+            var errorCount = items == null ? 0 : items.Count;
+            if (errorCount == 0 && eventCount <= 0)
             {
                 return true;
             }
 
-            var logsPayload = OtlpJsonWriter.BuildLogsPayload(items, options);
+            var logsPayload = OtlpJsonWriter.BuildLogsPayload(items, events, eventCount, options);
             var logsSent = await SendAsync(logsEndpoint, logsPayload, cancellationToken).ConfigureAwait(false);
             if (!logsSent)
             {
@@ -37,12 +47,15 @@ namespace Unimetry.Internal
             }
 
             var hasSpans = false;
-            for (var index = 0; index < items.Count; index++)
+            if (items != null)
             {
-                if (items[index].IncludeSpan)
+                for (var index = 0; index < items.Count; index++)
                 {
-                    hasSpans = true;
-                    break;
+                    if (items[index].IncludeSpan)
+                    {
+                        hasSpans = true;
+                        break;
+                    }
                 }
             }
 

@@ -23,13 +23,14 @@ docker compose up
 ### Play Mode
 
 - `UnimetrySampleBootstrap` が起動時に Unimetry を初期化
-- Inspector から `ReportSampleException` / `EmitSampleErrorLog` / `FlushNow` を呼び出し可能
+- Inspector から `ReportSampleException` / `EmitSampleErrorLog` / `EmitSampleEvent` / `FlushNow` を呼び出し可能
 
 ### Editor Menu
 
 - `Unimetry/Sample/Initialize For Play Mode`
 - `Unimetry/Sample/Report Test Exception`
 - `Unimetry/Sample/Emit Test Error Log`
+- `Unimetry/Sample/Emit Test Event`
 
 ## テスト
 
@@ -61,3 +62,4 @@ EditMode tests は `Assets/Tests/EditMode` にあります。
 | `UtilitiesTests` | fingerprint / trace id / stack trace 整形 |
 | `PersistentQueueTests` | 永続キュー順序・trim・再キュー |
 | `UnimetryClientTests` | 初期化と手動 report |
+| `EventTests` | Event の開始/終了、タグ、コンソール出力、`[Event]` 織り込み |

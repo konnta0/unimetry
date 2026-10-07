@@ -75,6 +75,48 @@ namespace Unimetry
         /// </summary>
         public Func<CapturedError, CapturedError> Sanitizer { get; set; }
 
+        /// <summary>
+        /// When true, <see cref="UnimetryEvent"/> records are buffered and exported as OTLP log events.
+        /// </summary>
+        public bool CaptureEvents { get; set; } = true;
+
+        /// <summary>
+        /// Maximum number of completed events retained in memory. Additional events are counted and dropped.
+        /// </summary>
+        public int MaxEventBuffer { get; set; } = 1024;
+
+        /// <summary>
+        /// Optional writer invoked for captured errors and completed events.
+        /// </summary>
+        public UnimetryLogWriter LogWriter { get; set; }
+
+        /// <summary>
+        /// Sends captured errors and events to <see cref="UnityEngine.Debug.unityLogger"/>,
+        /// which honors a user-installed log handler.
+        /// </summary>
+        /// <returns>This options instance.</returns>
+        public UnimetryOptions WithConsoleLog()
+        {
+            LogWriter = Internal.UnimetryConsoleLog.Write;
+            return this;
+        }
+
+        /// <summary>
+        /// Sends captured errors and events to <paramref name="writer"/>.
+        /// </summary>
+        /// <param name="writer">User logging callback. Invoked only when a record is produced.</param>
+        /// <returns>This options instance.</returns>
+        public UnimetryOptions WithLog(UnimetryLogWriter writer)
+        {
+            if (writer == null)
+            {
+                throw new ArgumentNullException(nameof(writer));
+            }
+
+            LogWriter = writer;
+            return this;
+        }
+
         internal void Validate()
         {
             if (string.IsNullOrWhiteSpace(Endpoint))
@@ -95,6 +137,11 @@ namespace Unimetry
             if (MaxBatchSize <= 0)
             {
                 throw new InvalidOperationException("MaxBatchSize must be greater than zero.");
+            }
+
+            if (MaxEventBuffer <= 0)
+            {
+                throw new InvalidOperationException("MaxEventBuffer must be greater than zero.");
             }
         }
     }

@@ -12,6 +12,7 @@ namespace Unimetry.Internal
         private readonly PersistentQueue queue;
         private readonly BackgroundFlusher flusher;
         private readonly OtlpExporter exporter;
+        private readonly EventBuffer eventBuffer;
         private bool started;
 
         public UnimetryRuntime(UnimetryOptions options)
@@ -19,7 +20,8 @@ namespace Unimetry.Internal
             this.options = options;
             queue = new PersistentQueue(options.MaxQueueSize);
             exporter = new OtlpExporter(options);
-            flusher = new BackgroundFlusher(queue, exporter, options);
+            eventBuffer = new EventBuffer(options.MaxEventBuffer);
+            flusher = new BackgroundFlusher(queue, exporter, options, eventBuffer);
             errorCapture = new ErrorCapture(options, EnqueueCapturedError);
         }
 
@@ -31,6 +33,7 @@ namespace Unimetry.Internal
             }
 
             started = true;
+            EventPipeline.Configure(eventBuffer, options.LogWriter, options.CaptureEvents);
             errorCapture.Start();
             flusher.Start();
         }
@@ -47,6 +50,7 @@ namespace Unimetry.Internal
 
         public void Dispose()
         {
+            EventPipeline.Configure(null, null, false);
             errorCapture.Dispose();
             flusher.Dispose();
         }
@@ -59,6 +63,18 @@ namespace Unimetry.Internal
             }
 
             var sanitized = options.Sanitizer?.Invoke(capturedError) ?? capturedError;
+            var unixNano = sanitized.CapturedAtUtc.ToUnixTimeMilliseconds() * 1_000_000L;
+            var severity = sanitized.Severity == CapturedErrorSeverity.Fatal
+                ? UnimetrySeverity.Fatal
+                : UnimetrySeverity.Error;
+            var entry = new UnimetryLogEntry(
+                UnimetryLogKind.Log,
+                "error",
+                sanitized.Message,
+                severity,
+                unixNano,
+                unixNano);
+            EventPipeline.EmitLog(in entry);
             queue.Enqueue(PendingExport.FromCapturedError(sanitized, options.ExportErrorSpans));
         }
     }
