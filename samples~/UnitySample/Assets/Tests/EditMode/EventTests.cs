@@ -15,6 +15,7 @@ namespace Unimetry.Tests
         [TearDown]
         public void TearDown()
         {
+            UnimetryEvent.ClearAttributes();
             UnimetryClient.Shutdown();
         }
 
@@ -60,6 +61,46 @@ namespace Unimetry.Tests
             Assert.AreEqual(3L, records[0].Tags[2].Bits);
             Assert.AreEqual(4L, records[0].Tags[3].Bits);
             Assert.AreEqual(1.5d, records[0].Tags[4].ReadDouble());
+        }
+
+        [Test]
+        public void SetAttribute_IsCopiedOntoLaterEvents()
+        {
+            UnimetryEvent.SetAttribute("user.id", "player-1");
+            UnimetryEvent.SetAttribute("session.id", "session-9");
+            Initialize();
+
+            UnimetryEvent.Write("ui.button.click");
+            using (var scope = UnimetryEvent.Begin("ui.button.play"))
+            {
+                scope.SetTag("ui.button", "play");
+                scope.SetTag("user.id", "override");
+            }
+
+            var records = Copy();
+            Assert.AreEqual(2, records.Length);
+            Assert.AreEqual("player-1", FindCommon(records[0], "user.id").Text);
+            Assert.AreEqual("session-9", FindCommon(records[0], "session.id").Text);
+            Assert.AreEqual("play", records[1].Tags[0].Text);
+            Assert.AreEqual("override", records[1].Tags[1].Text);
+            Assert.IsNull(FindCommon(records[1], "user.id").Key);
+            Assert.AreEqual("session-9", FindCommon(records[1], "session.id").Text);
+
+            var events = new EventRecord[1];
+            events[0] = records[0];
+            var payload = OtlpJsonWriter.BuildLogsPayload(new List<PendingExport>(), events, 1, new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                ServiceName = "unimetry-event-test",
+            });
+            StringAssert.Contains("\"user.id\"", payload);
+            StringAssert.Contains("player-1", payload);
+
+            UnimetryEvent.RemoveAttribute("user.id");
+            UnimetryEvent.Write("ui.button.after");
+            var after = Copy();
+            Assert.IsNull(FindCommon(after[2], "user.id").Key);
+            Assert.AreEqual("session-9", FindCommon(after[2], "session.id").Text);
         }
 
         [Test]
@@ -261,6 +302,25 @@ namespace Unimetry.Tests
             Assert.LessOrEqual(records[0].StartUnixNano, records[0].EndUnixNano);
         }
 
+        private static EventTag FindCommon(EventRecord record, string key)
+        {
+            var count = record.CommonTagCount;
+            if (record.CommonTags != null && count > record.CommonTags.Length)
+            {
+                count = record.CommonTags.Length;
+            }
+
+            for (var index = 0; index < count; index++)
+            {
+                if (record.CommonTags[index].Key == key)
+                {
+                    return record.CommonTags[index];
+                }
+            }
+
+            return default;
+        }
+
         private static async Task CrossAwait()
         {
             using (var handle = UnimetryEvent.Start("manual.async"))
@@ -303,6 +363,7 @@ namespace Unimetry.Tests
             for (var index = 0; index < buffer.Length; index++)
             {
                 buffer[index].Tags = new EventTag[EventBuffer.MaxTags];
+                buffer[index].CommonTags = new EventTag[EventAttributes.MaxCount];
             }
 
             var count = EventPipeline.CopyPending(buffer);

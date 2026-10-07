@@ -17,6 +17,7 @@ namespace Unimetry.Internal
             for (var index = 0; index < records.Length; index++)
             {
                 records[index].Tags = new EventTag[MaxTags];
+                records[index].CommonTags = new EventTag[EventAttributes.MaxCount];
             }
         }
 
@@ -68,6 +69,7 @@ namespace Unimetry.Internal
                 slot.StartUnixNano = unixNano;
                 slot.EndUnixNano = unixNano;
                 slot.SeverityNumber = (int)UnimetrySeverity.Info;
+                EventAttributes.Apply(ref slot, explicitCount: 0);
                 tail++;
                 if (tail == records.Length)
                 {
@@ -150,6 +152,8 @@ namespace Unimetry.Internal
             {
                 slot.Tags[index] = handle.Tags[index];
             }
+
+            EventAttributes.Apply(ref slot, tagCount);
         }
 
         private static void CopyRecord(ref EventRecord source, ref EventRecord destination)
@@ -167,6 +171,23 @@ namespace Unimetry.Internal
             for (var index = 0; index < source.TagCount; index++)
             {
                 destination.Tags[index] = source.Tags[index];
+            }
+
+            destination.CommonTagCount = source.CommonTagCount;
+            if (destination.CommonTags == null || source.CommonTags == null)
+            {
+                return;
+            }
+
+            var commonCount = source.CommonTagCount;
+            if (commonCount > destination.CommonTags.Length)
+            {
+                commonCount = destination.CommonTags.Length;
+            }
+
+            for (var index = 0; index < commonCount; index++)
+            {
+                destination.CommonTags[index] = source.CommonTags[index];
             }
         }
 
@@ -191,6 +212,18 @@ namespace Unimetry.Internal
             for (var index = 0; index < tagCount; index++)
             {
                 slot.Tags[index] = default;
+            }
+
+            var commonCount = slot.CommonTagCount;
+            slot.CommonTagCount = 0;
+            if (slot.CommonTags == null)
+            {
+                return;
+            }
+
+            for (var index = 0; index < commonCount; index++)
+            {
+                slot.CommonTags[index] = default;
             }
         }
     }

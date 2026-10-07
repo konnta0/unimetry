@@ -69,7 +69,7 @@ namespace Unimetry.Internal
             var builder = new StringBuilder(2048);
             builder.Append("{\"resourceLogs\":[{\"resource\":{\"attributes\":");
             AppendResourceAttributes(builder, options);
-            builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.1.0\"},\"logRecords\":[");
+            builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.2.0\"},\"logRecords\":[");
             var errorCount = items == null ? 0 : items.Count;
             if (eventCount < 0)
             {
@@ -119,7 +119,7 @@ namespace Unimetry.Internal
             var builder = new StringBuilder(2048);
             builder.Append("{\"resourceSpans\":[{\"resource\":{\"attributes\":");
             AppendResourceAttributes(builder, options);
-            builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.1.0\"},\"spans\":[");
+            builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.2.0\"},\"spans\":[");
             var first = true;
             for (var index = 0; index < items.Count; index++)
             {
@@ -149,7 +149,7 @@ namespace Unimetry.Internal
             attributes.WriteString("deployment.environment", options.DeploymentEnvironment);
             attributes.WriteString("telemetry.sdk.name", "unimetry");
             attributes.WriteString("telemetry.sdk.language", "csharp");
-            attributes.WriteString("telemetry.sdk.version", "0.1.0");
+            attributes.WriteString("telemetry.sdk.version", "0.2.0");
 
             if (options.ResourceAttributes != null)
             {
@@ -282,26 +282,44 @@ namespace Unimetry.Internal
 
             for (var index = 0; index < tagCount; index++)
             {
-                var tag = item.Tags[index];
-                switch (tag.Kind)
+                WriteEventTag(attributes, item.Tags[index]);
+            }
+
+            var commonCount = item.CommonTagCount;
+            if (item.CommonTags != null)
+            {
+                if (commonCount > item.CommonTags.Length)
                 {
-                    case EventTagKind.String:
-                        attributes.WriteString(tag.Key, tag.Text, allowEmpty: true);
-                        break;
-                    case EventTagKind.Bool:
-                        attributes.WriteBool(tag.Key, tag.Bits != 0);
-                        break;
-                    case EventTagKind.Int:
-                    case EventTagKind.Long:
-                        attributes.WriteInt(tag.Key, tag.Bits);
-                        break;
-                    case EventTagKind.Double:
-                        attributes.WriteDouble(tag.Key, tag.ReadDouble());
-                        break;
+                    commonCount = item.CommonTags.Length;
+                }
+
+                for (var index = 0; index < commonCount; index++)
+                {
+                    WriteEventTag(attributes, item.CommonTags[index]);
                 }
             }
 
             attributes.Complete();
+        }
+
+        private static void WriteEventTag(AttributeWriter attributes, EventTag tag)
+        {
+            switch (tag.Kind)
+            {
+                case EventTagKind.String:
+                    attributes.WriteString(tag.Key, tag.Text, allowEmpty: true);
+                    break;
+                case EventTagKind.Bool:
+                    attributes.WriteBool(tag.Key, tag.Bits != 0);
+                    break;
+                case EventTagKind.Int:
+                case EventTagKind.Long:
+                    attributes.WriteInt(tag.Key, tag.Bits);
+                    break;
+                case EventTagKind.Double:
+                    attributes.WriteDouble(tag.Key, tag.ReadDouble());
+                    break;
+            }
         }
 
         private static void AppendErrorAttributes(StringBuilder builder, PendingExport item)
@@ -344,7 +362,7 @@ namespace Unimetry.Internal
             var builder = new StringBuilder(1024);
             builder.Append("{\"resourceMetrics\":[{\"resource\":{\"attributes\":");
             AppendResourceAttributes(builder, options);
-            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.1.0\"},\"metrics\":[");
+            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.2.0\"},\"metrics\":[");
             var written = 0;
             if (!double.IsNaN(framesPerSecond) && !double.IsInfinity(framesPerSecond) && framesPerSecond >= 0)
             {

@@ -72,6 +72,75 @@ namespace Unimetry
         }
 
         /// <summary>
+        /// Sets a string attribute copied onto every later event.
+        /// A <see langword="null"/> value removes the key. An explicit tag with the same key replaces it for that event.
+        /// At most eight common attributes are kept.
+        /// </summary>
+        /// <param name="key">Attribute key, for example <c>user.id</c>.</param>
+        /// <param name="value">Attribute value. <see langword="null"/> removes the key.</param>
+        public static void SetAttribute(string key, string value)
+        {
+            Internal.EventAttributes.Set(key, value);
+        }
+
+        /// <summary>
+        /// Sets a boolean attribute copied onto every later event.
+        /// </summary>
+        /// <param name="key">Attribute key.</param>
+        /// <param name="value">Attribute value.</param>
+        public static void SetAttribute(string key, bool value)
+        {
+            Internal.EventAttributes.Set(key, value);
+        }
+
+        /// <summary>
+        /// Sets an integer attribute copied onto every later event.
+        /// </summary>
+        /// <param name="key">Attribute key.</param>
+        /// <param name="value">Attribute value.</param>
+        public static void SetAttribute(string key, int value)
+        {
+            Internal.EventAttributes.Set(key, value);
+        }
+
+        /// <summary>
+        /// Sets a 64-bit integer attribute copied onto every later event.
+        /// </summary>
+        /// <param name="key">Attribute key.</param>
+        /// <param name="value">Attribute value.</param>
+        public static void SetAttribute(string key, long value)
+        {
+            Internal.EventAttributes.Set(key, value);
+        }
+
+        /// <summary>
+        /// Sets a floating-point attribute copied onto every later event.
+        /// </summary>
+        /// <param name="key">Attribute key.</param>
+        /// <param name="value">Attribute value.</param>
+        public static void SetAttribute(string key, double value)
+        {
+            Internal.EventAttributes.Set(key, value);
+        }
+
+        /// <summary>
+        /// Removes one common event attribute.
+        /// </summary>
+        /// <param name="key">Attribute key to remove.</param>
+        public static void RemoveAttribute(string key)
+        {
+            Internal.EventAttributes.Remove(key);
+        }
+
+        /// <summary>
+        /// Removes every common event attribute.
+        /// </summary>
+        public static void ClearAttributes()
+        {
+            Internal.EventAttributes.Clear();
+        }
+
+        /// <summary>
         /// Starts an event from woven IL.
         /// </summary>
         /// <param name="name">Event name.</param>

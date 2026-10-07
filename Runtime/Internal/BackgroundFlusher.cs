@@ -39,6 +39,7 @@ namespace Unimetry.Internal
             for (var index = 0; index < eventBatch.Length; index++)
             {
                 eventBatch[index].Tags = new EventTag[EventBuffer.MaxTags];
+                eventBatch[index].CommonTags = new EventTag[EventAttributes.MaxCount];
             }
         }
 

@@ -118,6 +118,17 @@ using (var handle = UnimetryEvent.Start("match.load"))
 UnimetryEvent.Write("checkpoint.reached");
 ```
 
+`SetAttribute` は、その後のすべての Event（`Write` と `[Event]` を含む）にコピーされる属性を保存します。ログイン後に一度設定します。同じキーの明示的なタグがあるイベントでは、そのイベントの値が優先されます。共通属性は最大 8 個です。文字列の `null` はそのキーを外します。ログアウト時は `ClearAttributes` でまとめて外します。
+
+```csharp
+UnimetryEvent.SetAttribute("user.id", userId);
+
+using (var click = UnimetryEvent.Begin("ui.button.click"))
+{
+    click.SetTag("ui.button", "play");
+}
+```
+
 `[Event]` は Unity の IL Post Processor が織ります。generic method、iterator、`async void`、local function は対象外で、警告を出してメソッドはそのまま残します。`UNIMETRY_DISABLE_EVENT_WEAVE` を定義すると織り込みを止めます。タグに使える型は `string`、`bool`、`int`、`long`、`double` です。
 
 高頻度の Event はディスクへ書かず、メモリ上のリングバッファから `/v1/logs` に送ります。溢れた分は捨てて件数だけ数えます。`Shutdown` の前に `FlushAsync` を呼ぶと、残っている Event を送れます。

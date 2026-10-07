@@ -85,5 +85,7 @@ namespace Unimetry.Internal
         public int DroppedTags;
         public int TagCount;
         public EventTag[] Tags;
+        public int CommonTagCount;
+        public EventTag[] CommonTags;
     }
 }
