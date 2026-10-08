@@ -1,5 +1,7 @@
 using System;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace Unimetry.Sample
 {
@@ -9,6 +11,7 @@ namespace Unimetry.Sample
     public sealed class UnimetrySampleBootstrap : MonoBehaviour
     {
         [SerializeField]
+        [Tooltip("OTLP/HTTP JSON base URL. Collector: http://localhost:4318. Aspire dashboard: http://localhost:18890.")]
         private string endpoint = "http://localhost:4318";
 
         [SerializeField]
@@ -25,6 +28,10 @@ namespace Unimetry.Sample
 
         [SerializeField]
         private bool consoleLog = true;
+
+        [SerializeField]
+        [Tooltip("Aspire sample API. AppHost binds this to http://localhost:5288.")]
+        private string apiBaseUrl = "http://localhost:5288";
 
         private void Awake()
         {
@@ -91,6 +98,61 @@ namespace Unimetry.Sample
         {
             await UnimetryClient.FlushAsync();
             Debug.Log("Unimetry flush completed.");
+        }
+
+        /// <summary>
+        /// Sends a gameplay request to the Aspire sample API with a W3C <c>traceparent</c>.
+        /// </summary>
+        public async void CallAspireMatchLoad()
+        {
+            await SendAspireRequest("GET", "/match/load", "aspire.match.load");
+        }
+
+        /// <summary>
+        /// Sends a request that the Aspire sample API fails on purpose.
+        /// </summary>
+        public async void CallAspireError()
+        {
+            await SendAspireRequest("POST", "/error", "aspire.sample.error");
+        }
+
+        private async Task SendAspireRequest(string method, string path, string spanName)
+        {
+            var url = apiBaseUrl.TrimEnd('/') + path;
+            using var span = UnimetryTrace.Start(spanName);
+            using var scope = UnimetryEvent.Start(spanName);
+            scope?.SetTag("http.route", path);
+            scope?.SetTag("server.address", apiBaseUrl);
+
+            using var request = new UnityWebRequest(url, method);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            var traceParent = UnimetryTrace.FormatTraceParent(span);
+            if (!string.IsNullOrEmpty(traceParent))
+            {
+                request.SetRequestHeader("traceparent", traceParent);
+            }
+
+            var operation = request.SendWebRequest();
+            while (!operation.isDone)
+            {
+                await Task.Yield();
+            }
+
+#if UNITY_2020_2_OR_NEWER
+            var succeeded = request.result == UnityWebRequest.Result.Success;
+#else
+            var succeeded = !request.isNetworkError && !request.isHttpError;
+#endif
+            scope?.SetTag("http.status_code", (int)request.responseCode);
+            if (succeeded)
+            {
+                Debug.Log("Aspire request succeeded: " + path + " " + request.downloadHandler.text);
+                return;
+            }
+
+            var error = "Aspire request failed: " + path + " " + request.responseCode + " " + request.error;
+            Debug.LogError(error);
+            UnimetryClient.Report(new InvalidOperationException(error));
         }
     }
 }

@@ -41,8 +41,11 @@
 ExportedObj/
 .consulo/
 **/[Tt]est[Rr]esults/
+**/[Bb]in/
 **/*.csproj
 **/*.sln
+!samples~/Aspire/**/*.csproj
+!samples~/Aspire/**/*.sln
 *.suo
 *.tmp
 *.user

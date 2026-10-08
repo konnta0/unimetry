@@ -13,7 +13,7 @@ A Unity project for checking that Unimetry works.
 
 1. Open `samples~/UnitySample` in Unity Hub
 2. After the first import, attach `Assets/UnimetrySample/UnimetrySampleBootstrap.cs` to a GameObject in the scene
-3. Optional: start the Collector in `samples/collector` ([README](../../samples/collector/README.md))
+3. Optional: start the Collector in `samples/collector` ([README](../../samples/collector/README.md)), or the Aspire AppHost in `samples~/Aspire` ([README](../Aspire/README.md))
 
 ```bash
 cd samples/collector
@@ -25,7 +25,8 @@ docker compose up
 ### Play Mode
 
 - `UnimetrySampleBootstrap` initializes Unimetry on startup
-- From the Inspector you can call `ReportSampleException`, `EmitSampleErrorLog`, `EmitSampleEvent`, and `FlushNow`
+- From the Inspector you can call `ReportSampleException`, `EmitSampleErrorLog`, `EmitSampleEvent`, `FlushNow`, `CallAspireMatchLoad`, and `CallAspireError`
+- For Aspire, set **Endpoint** to `http://localhost:18890` and keep **Api Base Url** as `http://localhost:5288`
 
 ### Editor menu
 
@@ -33,6 +34,8 @@ docker compose up
 - `Unimetry/Sample/Report Test Exception`
 - `Unimetry/Sample/Emit Test Error Log`
 - `Unimetry/Sample/Emit Test Event`
+- `Unimetry/Sample/Call Aspire Match Load`
+- `Unimetry/Sample/Call Aspire Error`
 
 ## Tests
 

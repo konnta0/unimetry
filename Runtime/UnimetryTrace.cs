@@ -36,6 +36,22 @@ namespace Unimetry
         }
 
         /// <summary>
+        /// Formats a W3C <c>traceparent</c> header from an active span.
+        /// Returns an empty string when the span has no trace.
+        /// </summary>
+        /// <param name="span">Span whose identifiers are written into the header.</param>
+        /// <returns>A value such as <c>00-{trace}-{span}-01</c>, or empty.</returns>
+        public static string FormatTraceParent(UnimetrySpan span)
+        {
+            if (span == null || string.IsNullOrEmpty(span.TraceId) || string.IsNullOrEmpty(span.SpanId))
+            {
+                return string.Empty;
+            }
+
+            return string.Concat("00-", span.TraceId, "-", span.SpanId, "-01");
+        }
+
+        /// <summary>
         /// Sets baggage copied onto later span attributes. An empty value removes the key.
         /// At most eight entries are kept. This is not written to resource attributes.
         /// </summary>

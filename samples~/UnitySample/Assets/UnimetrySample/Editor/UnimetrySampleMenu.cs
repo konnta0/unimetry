@@ -37,7 +37,21 @@ namespace Unimetry.Sample.Editor
             }
         }
 
-        private static void EnsureInitialized()
+        [MenuItem("Unimetry/Sample/Call Aspire Match Load")]
+        private static void CallAspireMatchLoad()
+        {
+            var bootstrap = EnsureBootstrap(useAspireDashboard: true);
+            bootstrap.CallAspireMatchLoad();
+        }
+
+        [MenuItem("Unimetry/Sample/Call Aspire Error")]
+        private static void CallAspireError()
+        {
+            var bootstrap = EnsureBootstrap(useAspireDashboard: true);
+            bootstrap.CallAspireError();
+        }
+
+        private static void EnsureInitialized(bool useAspireDashboard = false)
         {
             if (UnimetryClient.IsInitialized)
             {
@@ -46,12 +60,25 @@ namespace Unimetry.Sample.Editor
 
             UnimetryClient.Initialize(new UnimetryOptions
             {
-                Endpoint = "http://localhost:4318",
+                Endpoint = useAspireDashboard ? "http://localhost:18890" : "http://localhost:4318",
                 ServiceName = "unimetry-unity-sample-editor",
                 ServiceVersion = Application.version,
                 DeploymentEnvironment = "development",
                 AllowInsecureTls = true,
             });
+        }
+
+        private static UnimetrySampleBootstrap EnsureBootstrap(bool useAspireDashboard = false)
+        {
+            EnsureInitialized(useAspireDashboard);
+            var existing = UnityEngine.Object.FindObjectOfType<UnimetrySampleBootstrap>();
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            var gameObject = new GameObject("UnimetrySampleBootstrap");
+            return gameObject.AddComponent<UnimetrySampleBootstrap>();
         }
     }
 }

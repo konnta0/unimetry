@@ -13,7 +13,7 @@ Unimetry の動作確認用 Unity プロジェクトです。
 
 1. Unity Hub で `samples~/UnitySample` を開く
 2. 初回 import 後、`Assets/UnimetrySample/UnimetrySampleBootstrap.cs` をシーン内の GameObject にアタッチ
-3. 任意: `samples/collector` の Collector を起動 ([README](../../samples/collector/README.ja.md))
+3. 任意: `samples/collector` の Collector を起動 ([README](../../samples/collector/README.ja.md))、または `samples~/Aspire` の Aspire AppHost を起動 ([README](../Aspire/README.ja.md))
 
 ```bash
 cd samples/collector
@@ -25,7 +25,8 @@ docker compose up
 ### Play Mode
 
 - `UnimetrySampleBootstrap` が起動時に Unimetry を初期化
-- Inspector から `ReportSampleException` / `EmitSampleErrorLog` / `EmitSampleEvent` / `FlushNow` を呼び出し可能
+- Inspector から `ReportSampleException` / `EmitSampleErrorLog` / `EmitSampleEvent` / `FlushNow` / `CallAspireMatchLoad` / `CallAspireError` を呼び出し可能
+- Aspire を使うときは **Endpoint** を `http://localhost:18890` にし、**Api Base Url** は `http://localhost:5288` のままにする
 
 ### Editor Menu
 
@@ -33,6 +34,8 @@ docker compose up
 - `Unimetry/Sample/Report Test Exception`
 - `Unimetry/Sample/Emit Test Error Log`
 - `Unimetry/Sample/Emit Test Event`
+- `Unimetry/Sample/Call Aspire Match Load`
+- `Unimetry/Sample/Call Aspire Error`
 
 ## テスト
 

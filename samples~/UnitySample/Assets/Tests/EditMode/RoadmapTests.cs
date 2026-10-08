@@ -51,6 +51,21 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void FormatTraceParent_UsesCurrentSpanIds()
+        {
+            using (var span = UnimetryTrace.Start("aspire.request"))
+            {
+                var header = UnimetryTrace.FormatTraceParent(span);
+
+                StringAssert.StartsWith("00-", header);
+                StringAssert.Contains(span.TraceId, header);
+                StringAssert.Contains(span.SpanId, header);
+                StringAssert.EndsWith("-01", header);
+                Assert.IsTrue(UnimetryTrace.ExtractTraceParent(header));
+            }
+        }
+
+        [Test]
         public void ApplyToError_UsesCurrentSpanAsParent()
         {
             using (var span = UnimetryTrace.Start("gameplay"))

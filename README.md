@@ -58,7 +58,7 @@ Unity App
 git clone https://github.com/konnta0/unimetry.git
 ```
 
-Open `samples~/UnitySample` in Unity Hub. See [samples~/UnitySample/README.md](samples~/UnitySample/README.md).
+Open `samples~/UnitySample` in Unity Hub. See [samples~/UnitySample/README.md](samples~/UnitySample/README.md). To send Unity requests into an Aspire dashboard, start [samples~/Aspire](samples~/Aspire/README.md) and point Unimetry at `http://localhost:18890`.
 
 ### Add to another project
 
@@ -191,12 +191,13 @@ UnimetryClient.AddBreadcrumb("entered match");
 ```csharp
 UnimetryTrace.ExtractTraceParent(traceparentHeader);
 UnimetryTrace.SetBaggage("user.id", "player-1");
-using (UnimetryTrace.Start("match.load"))
+using (var span = UnimetryTrace.Start("match.load"))
 {
+    var outgoing = UnimetryTrace.FormatTraceParent(span);
 }
 ```
 
-`ExtractTraceParent` accepts a W3C `traceparent`. Where `Activity.Current` has a trace, errors use that trace id and parent span. Gameplay spans export as OTLP traces with status OK. Baggage is copied onto span attributes. `CaptureMetrics` (default on) exports `unity.fps`, `unity.memory.used_bytes`, and `unity.startup.duration_s` to `/v1/metrics`.
+`ExtractTraceParent` accepts a W3C `traceparent`. `FormatTraceParent` writes the current span as `00-{trace}-{span}-01` for outgoing HTTP. Where `Activity.Current` has a trace, errors use that trace id and parent span. Gameplay spans export as OTLP traces with status OK. Baggage is copied onto span attributes. `CaptureMetrics` (default on) exports `unity.fps`, `unity.memory.used_bytes`, and `unity.startup.duration_s` to `/v1/metrics`.
 
 The offline queue is encrypted with AES-256-CBC and HMAC-SHA256. The key file is `persistentDataPath/unimetry/offline.key`, next to the queue, so this stops casual reading of `queue.json` and does not protect a copy of the whole directory.
 

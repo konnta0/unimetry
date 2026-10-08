@@ -58,7 +58,7 @@ Unity App
 git clone https://github.com/konnta0/unimetry.git
 ```
 
-Unity Hub で `samples~/UnitySample` を開いてください。詳細は [samples~/UnitySample/README.ja.md](samples~/UnitySample/README.ja.md) を参照。
+Unity Hub で `samples~/UnitySample` を開いてください。詳細は [samples~/UnitySample/README.ja.md](samples~/UnitySample/README.ja.md) を参照。Aspire ダッシュボードへ Unity から要求を送るときは [samples~/Aspire](samples~/Aspire/README.ja.md) を起動し、Unimetry の endpoint を `http://localhost:18890` にしてください。
 
 ### 他プロジェクトへの組み込み
 
@@ -191,12 +191,13 @@ UnimetryClient.AddBreadcrumb("entered match");
 ```csharp
 UnimetryTrace.ExtractTraceParent(traceparentHeader);
 UnimetryTrace.SetBaggage("user.id", "player-1");
-using (UnimetryTrace.Start("match.load"))
+using (var span = UnimetryTrace.Start("match.load"))
 {
+    var outgoing = UnimetryTrace.FormatTraceParent(span);
 }
 ```
 
-`ExtractTraceParent` は W3C `traceparent` を受けます。`Activity.Current` にトレースがあるときは、その trace id と親 span をエラーに使います。ゲームプレイ span は status OK の OTLP trace として送ります。baggage は span attribute にコピーします。`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` を `/v1/metrics` へ送ります。
+`ExtractTraceParent` は W3C `traceparent` を受けます。`FormatTraceParent` は現在の span を outgoing HTTP 用の `00-{trace}-{span}-01` にします。`Activity.Current` にトレースがあるときは、その trace id と親 span をエラーに使います。ゲームプレイ span は status OK の OTLP trace として送ります。baggage は span attribute にコピーします。`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` を `/v1/metrics` へ送ります。
 
 オフラインキューは AES-256-CBC と HMAC-SHA256 で暗号化します。鍵はキューの隣の `persistentDataPath/unimetry/offline.key` です。`queue.json` をそのまま読めなくします。ディレクトリごとコピーされた場合の保護にはなりません。
 
