@@ -77,7 +77,7 @@ namespace Unimetry.Editor.Weaving
                 var readerParameters = new ReaderParameters
                 {
                     AssemblyResolver = resolver,
-                    ReadingMode = ReadingMode.Immediate,
+                    ReadingMode = ReadingMode.Deferred,
                     InMemory = true,
                 };
                 if (pdb != null && pdb.Length > 0)
@@ -100,6 +100,11 @@ namespace Unimetry.Editor.Weaving
                 CollectTypes(assembly.MainModule.Types, types);
                 for (var typeIndex = 0; typeIndex < types.Count; typeIndex++)
                 {
+                    if (!types[typeIndex].HasMethods)
+                    {
+                        continue;
+                    }
+
                     var methods = types[typeIndex].Methods;
                     for (var methodIndex = 0; methodIndex < methods.Count; methodIndex++)
                     {
@@ -163,7 +168,9 @@ namespace Unimetry.Editor.Weaving
 
             for (var index = 0; index < method.CustomAttributes.Count; index++)
             {
-                if (method.CustomAttributes[index].AttributeType.FullName == "Unimetry.EventAttribute")
+                var attributeType = method.CustomAttributes[index].AttributeType;
+                if (attributeType.Name == "EventAttribute" &&
+                    attributeType.FullName == "Unimetry.EventAttribute")
                 {
                     return true;
                 }
@@ -172,10 +179,16 @@ namespace Unimetry.Editor.Weaving
             return false;
         }
 
+        // Compiler-generated types never carry [Event]; their bodies load only if an async method resolves them.
         private static void CollectTypes(IEnumerable<TypeDefinition> source, List<TypeDefinition> destination)
         {
             foreach (var type in source)
             {
+                if (type.Name.Length > 0 && type.Name[0] == '<')
+                {
+                    continue;
+                }
+
                 destination.Add(type);
                 if (type.HasNestedTypes)
                 {

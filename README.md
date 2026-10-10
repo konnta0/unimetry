@@ -129,7 +129,7 @@ using (var click = UnimetryEvent.Begin("ui.button.click"))
 }
 ```
 
-`[Event]` is woven by Unity's IL Post Processor. Generic methods, iterators, `async void`, and local functions are left unchanged and produce a warning. Define `UNIMETRY_DISABLE_EVENT_WEAVE` to disable weaving. Tag types are `string`, `bool`, `int`, `long`, and `double`.
+`[Event]` is woven by Unity's IL Post Processor. Woven synchronous methods keep a single body so breakpoints bind to the IL that actually runs; disabled capture still allocates nothing. Generic methods, iterators, `async void`, and local functions are left unchanged and produce a warning. Define `UNIMETRY_DISABLE_EVENT_WEAVE` to disable weaving. Tag types are `string`, `bool`, `int`, `long`, and `double`.
 
 High-frequency events are not written to disk. They are sent to `/v1/logs` from an in-memory ring buffer. Overflow is dropped and only the drop count is kept. Call `FlushAsync` before `Shutdown` to send events that are still buffered.
 

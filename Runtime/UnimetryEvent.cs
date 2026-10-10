@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Unimetry
@@ -145,6 +146,8 @@ namespace Unimetry
         /// </summary>
         /// <param name="name">Event name.</param>
         /// <returns>A pooled handle, or <see langword="null"/> when capture is disabled.</returns>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static EventHandle WeaveStart(string name)
         {
@@ -157,6 +160,8 @@ namespace Unimetry
         /// <param name="handle">Active event handle.</param>
         /// <param name="key">Attribute key.</param>
         /// <param name="value">Attribute value.</param>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void WeaveSetTag(EventHandle handle, string key, string value)
         {
@@ -172,6 +177,8 @@ namespace Unimetry
         /// <param name="handle">Active event handle.</param>
         /// <param name="key">Attribute key.</param>
         /// <param name="value">Attribute value.</param>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void WeaveSetTag(EventHandle handle, string key, bool value)
         {
@@ -187,6 +194,8 @@ namespace Unimetry
         /// <param name="handle">Active event handle.</param>
         /// <param name="key">Attribute key.</param>
         /// <param name="value">Attribute value.</param>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void WeaveSetTag(EventHandle handle, string key, int value)
         {
@@ -202,6 +211,8 @@ namespace Unimetry
         /// <param name="handle">Active event handle.</param>
         /// <param name="key">Attribute key.</param>
         /// <param name="value">Attribute value.</param>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void WeaveSetTag(EventHandle handle, string key, long value)
         {
@@ -217,6 +228,8 @@ namespace Unimetry
         /// <param name="handle">Active event handle.</param>
         /// <param name="key">Attribute key.</param>
         /// <param name="value">Attribute value.</param>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void WeaveSetTag(EventHandle handle, string key, double value)
         {
@@ -231,6 +244,8 @@ namespace Unimetry
         /// </summary>
         /// <param name="handle">Active event handle.</param>
         /// <param name="exception">Exception leaving the woven method.</param>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void WeaveRecordException(EventHandle handle, Exception exception)
         {
@@ -245,6 +260,8 @@ namespace Unimetry
         /// Completes an event from woven IL.
         /// </summary>
         /// <param name="handle">Active event handle.</param>
+        [DebuggerHidden]
+        [DebuggerStepThrough]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void WeaveStop(EventHandle handle)
         {

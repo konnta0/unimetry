@@ -44,6 +44,14 @@ namespace Unimetry.Editor.Weaving
     {
         private const string HandleFieldName = "<Unimetry>event";
 
+        private static readonly string[] RuntimeAssemblies =
+        {
+            "mscorlib",
+            "netstandard",
+            "System.Runtime",
+            "System.Private.CoreLib",
+        };
+
         public static bool TryCreateHooks(AssemblyDefinition assembly, out WeaveHooks hooks, out string error)
         {
             hooks = null;
@@ -182,13 +190,12 @@ namespace Unimetry.Editor.Weaving
             }
         }
 
+        // One user body: breakpoints bind to the IL that actually runs. EventEnabled still
+        // skips WeaveStart; try/finally always wraps so disabled cost is only the empty handlers.
         private static void WeaveSync(MethodDefinition method, WeaveHooks hooks, string eventName, List<TagSite> tags)
         {
             var body = method.Body;
             ExpandBranches(body);
-            var originalInstructions = body.Instructions.ToArray();
-            var handlerSnapshots = SnapshotHandlers(body);
-            var fastPath = CloneInstructions(originalInstructions);
             var il = body.GetILProcessor();
             body.InitLocals = true;
 
@@ -203,7 +210,10 @@ namespace Unimetry.Editor.Weaving
                 body.Variables.Add(result);
             }
 
+            var injected = new List<Instruction>();
+            var keepVisible = new HashSet<Instruction>();
             var afterHandlers = il.Create(OpCodes.Nop);
+            injected.Add(afterHandlers);
             foreach (var instruction in body.Instructions.ToArray())
             {
                 if (instruction.OpCode != OpCodes.Ret)
@@ -220,56 +230,99 @@ namespace Unimetry.Editor.Weaving
                 {
                     var store = il.Create(OpCodes.Stloc, result);
                     il.InsertBefore(instruction, store);
+                    injected.Add(store);
                 }
 
                 var leave = il.Create(OpCodes.Leave, afterHandlers);
+                MoveSequencePoint(method, instruction, leave);
+                keepVisible.Add(leave);
                 Retarget(body, instruction, leave);
                 il.Replace(instruction, leave);
             }
 
-            var anchor = body.Instructions[0];
+            var userStart = body.Instructions[0];
             var prologue = new List<Instruction>
             {
+                il.Create(OpCodes.Volatile),
+                il.Create(OpCodes.Ldsfld, hooks.EventEnabled),
+                il.Create(OpCodes.Brfalse, userStart),
                 il.Create(OpCodes.Ldstr, eventName),
                 il.Create(OpCodes.Call, hooks.WeaveStart),
                 il.Create(OpCodes.Stloc, handle),
             };
             AppendTags(il, prologue, tags, handle);
-            InsertBefore(il, anchor, prologue);
+            InsertBefore(il, userStart, prologue);
+            injected.AddRange(prologue);
 
             var catchStart = il.Create(OpCodes.Nop);
+            var storeException = il.Create(OpCodes.Stloc, exception);
+            var skipRecord = il.Create(OpCodes.Nop);
+            var loadHandleForRecord = il.Create(OpCodes.Ldloc, handle);
+            var branchSkipRecord = il.Create(OpCodes.Brfalse, skipRecord);
+            var loadHandleForRecordCall = il.Create(OpCodes.Ldloc, handle);
+            var loadException = il.Create(OpCodes.Ldloc, exception);
+            var record = il.Create(OpCodes.Call, hooks.RecordException);
             var rethrow = il.Create(OpCodes.Rethrow);
             var finallyStart = il.Create(OpCodes.Nop);
-            var endFinally = il.Create(OpCodes.Endfinally);
             var skipDispose = il.Create(OpCodes.Nop);
-            var skipRecord = il.Create(OpCodes.Nop);
+            var loadHandleForDispose = il.Create(OpCodes.Ldloc, handle);
+            var branchSkipDispose = il.Create(OpCodes.Brfalse, skipDispose);
+            var loadHandleForDisposeCall = il.Create(OpCodes.Ldloc, handle);
+            var dispose = il.Create(OpCodes.Call, hooks.WeaveStop);
+            var endFinally = il.Create(OpCodes.Endfinally);
+            Instruction loadResult = null;
+            var ret = il.Create(OpCodes.Ret);
 
             il.Append(catchStart);
             CloseOpenHandlers(body, catchStart);
-            il.Append(il.Create(OpCodes.Stloc, exception));
-            il.Append(il.Create(OpCodes.Ldloc, handle));
-            il.Append(il.Create(OpCodes.Brfalse, skipRecord));
-            il.Append(il.Create(OpCodes.Ldloc, handle));
-            il.Append(il.Create(OpCodes.Ldloc, exception));
-            il.Append(il.Create(OpCodes.Call, hooks.RecordException));
+            il.Append(storeException);
+            il.Append(loadHandleForRecord);
+            il.Append(branchSkipRecord);
+            il.Append(loadHandleForRecordCall);
+            il.Append(loadException);
+            il.Append(record);
             il.Append(skipRecord);
             il.Append(rethrow);
 
             il.Append(finallyStart);
-            il.Append(il.Create(OpCodes.Ldloc, handle));
-            il.Append(il.Create(OpCodes.Brfalse, skipDispose));
-            il.Append(il.Create(OpCodes.Ldloc, handle));
-            il.Append(il.Create(OpCodes.Call, hooks.WeaveStop));
+            il.Append(loadHandleForDispose);
+            il.Append(branchSkipDispose);
+            il.Append(loadHandleForDisposeCall);
+            il.Append(dispose);
             il.Append(skipDispose);
             il.Append(endFinally);
 
             il.Append(afterHandlers);
             if (result != null)
             {
-                il.Append(il.Create(OpCodes.Ldloc, result));
+                loadResult = il.Create(OpCodes.Ldloc, result);
+                il.Append(loadResult);
             }
 
-            il.Append(il.Create(OpCodes.Ret));
+            il.Append(ret);
+
+            injected.Add(catchStart);
+            injected.Add(storeException);
+            injected.Add(loadHandleForRecord);
+            injected.Add(branchSkipRecord);
+            injected.Add(loadHandleForRecordCall);
+            injected.Add(loadException);
+            injected.Add(record);
+            injected.Add(skipRecord);
+            injected.Add(rethrow);
+            injected.Add(finallyStart);
+            injected.Add(loadHandleForDispose);
+            injected.Add(branchSkipDispose);
+            injected.Add(loadHandleForDisposeCall);
+            injected.Add(dispose);
+            injected.Add(skipDispose);
+            injected.Add(endFinally);
+            if (loadResult != null)
+            {
+                injected.Add(loadResult);
+            }
+
+            injected.Add(ret);
 
             var tryStart = prologue[0];
             body.ExceptionHandlers.Add(new ExceptionHandler(ExceptionHandlerType.Catch)
@@ -288,20 +341,7 @@ namespace Unimetry.Editor.Weaving
                 HandlerEnd = afterHandlers,
             });
 
-            var slowStart = prologue[0];
-            var fastPathInstructions = new List<Instruction>
-            {
-                il.Create(OpCodes.Volatile),
-                il.Create(OpCodes.Ldsfld, hooks.EventEnabled),
-                il.Create(OpCodes.Brtrue, slowStart),
-            };
-            for (var index = 0; index < originalInstructions.Length; index++)
-            {
-                fastPathInstructions.Add(fastPath[originalInstructions[index]]);
-            }
-
-            InsertBefore(il, slowStart, fastPathInstructions);
-            AddFastPathHandlers(body, handlerSnapshots, fastPath, slowStart);
+            HideInjectedSequencePoints(method, injected, keepVisible);
             body.MaxStackSize = Math.Max(body.MaxStackSize, 8) + 4;
             method.CustomAttributes.Add(new CustomAttribute(hooks.WovenConstructor));
         }
@@ -984,78 +1024,76 @@ namespace Unimetry.Editor.Weaving
             }
         }
 
-        private static Dictionary<Instruction, Instruction> CloneInstructions(Instruction[] source)
+        private static void MoveSequencePoint(MethodDefinition method, Instruction from, Instruction to)
         {
-            var map = new Dictionary<Instruction, Instruction>(source.Length);
-            for (var index = 0; index < source.Length; index++)
+            var points = method.DebugInformation != null ? method.DebugInformation.SequencePoints : null;
+            if (points == null)
             {
-                var instruction = source[index];
-                var clone = Instruction.Create(OpCodes.Nop);
-                clone.OpCode = instruction.OpCode;
-                clone.Operand = instruction.Operand;
-                map.Add(instruction, clone);
+                return;
             }
 
-            for (var index = 0; index < source.Length; index++)
+            for (var index = 0; index < points.Count; index++)
             {
-                var clone = map[source[index]];
-                if (clone.Operand is Instruction target)
+                var point = points[index];
+                if (point.Offset != from.Offset)
                 {
-                    clone.Operand = map[target];
+                    continue;
                 }
-                else if (clone.Operand is Instruction[] targets)
-                {
-                    var remapped = new Instruction[targets.Length];
-                    for (var targetIndex = 0; targetIndex < targets.Length; targetIndex++)
-                    {
-                        remapped[targetIndex] = map[targets[targetIndex]];
-                    }
 
-                    clone.Operand = remapped;
-                }
+                points[index] = new SequencePoint(to, point.Document)
+                {
+                    StartLine = point.StartLine,
+                    StartColumn = point.StartColumn,
+                    EndLine = point.EndLine,
+                    EndColumn = point.EndColumn,
+                };
+                return;
             }
-
-            return map;
         }
 
-        private static void AddFastPathHandlers(
-            MethodBody body,
-            List<HandlerSnapshot> snapshots,
-            Dictionary<Instruction, Instruction> map,
-            Instruction slowStart)
+        private static void HideInjectedSequencePoints(
+            MethodDefinition method,
+            List<Instruction> injected,
+            HashSet<Instruction> keepVisible)
         {
-            for (var index = snapshots.Count - 1; index >= 0; index--)
+            var debug = method.DebugInformation;
+            if (debug == null)
             {
-                var snapshot = snapshots[index];
-                body.ExceptionHandlers.Insert(0, new ExceptionHandler(snapshot.HandlerType)
+                return;
+            }
+
+            Document document = null;
+            for (var index = 0; index < debug.SequencePoints.Count; index++)
+            {
+                var point = debug.SequencePoints[index];
+                if (point.Document != null)
                 {
-                    CatchType = snapshot.CatchType,
-                    TryStart = map[snapshot.TryStart],
-                    TryEnd = snapshot.TryEnd == null ? slowStart : map[snapshot.TryEnd],
-                    HandlerStart = map[snapshot.HandlerStart],
-                    HandlerEnd = snapshot.HandlerEnd == null ? slowStart : map[snapshot.HandlerEnd],
-                    FilterStart = snapshot.FilterStart == null ? null : map[snapshot.FilterStart],
+                    document = point.Document;
+                    break;
+                }
+            }
+
+            if (document == null)
+            {
+                return;
+            }
+
+            for (var index = 0; index < injected.Count; index++)
+            {
+                var instruction = injected[index];
+                if (keepVisible != null && keepVisible.Contains(instruction))
+                {
+                    continue;
+                }
+
+                debug.SequencePoints.Add(new SequencePoint(instruction, document)
+                {
+                    StartLine = 0xFEEFEE,
+                    EndLine = 0xFEEFEE,
+                    StartColumn = 0,
+                    EndColumn = 0,
                 });
             }
-        }
-
-        private static List<HandlerSnapshot> SnapshotHandlers(MethodBody body)
-        {
-            var snapshots = new List<HandlerSnapshot>(body.ExceptionHandlers.Count);
-            for (var index = 0; index < body.ExceptionHandlers.Count; index++)
-            {
-                var handler = body.ExceptionHandlers[index];
-                snapshots.Add(new HandlerSnapshot(
-                    handler.HandlerType,
-                    handler.CatchType,
-                    handler.TryStart,
-                    handler.TryEnd,
-                    handler.HandlerStart,
-                    handler.HandlerEnd,
-                    handler.FilterStart));
-            }
-
-            return snapshots;
         }
 
         private static AssemblyDefinition ResolveAssembly(AssemblyDefinition assembly, string name)
@@ -1083,22 +1121,49 @@ namespace Unimetry.Editor.Weaving
 
         private static TypeDefinition FindType(AssemblyDefinition assembly, string fullName)
         {
-            for (var index = 0; index < assembly.MainModule.AssemblyReferences.Count; index++)
+            var local = assembly.MainModule.GetType(fullName);
+            if (local != null)
             {
-                AssemblyDefinition resolved;
-                try
-                {
-                    resolved = assembly.MainModule.AssemblyResolver.Resolve(assembly.MainModule.AssemblyReferences[index]);
-                }
-                catch (AssemblyResolutionException)
-                {
-                    continue;
-                }
+                return local;
+            }
 
-                var type = resolved?.MainModule.GetType(fullName);
-                if (type != null)
+            var type = FindTypeInRuntimeAssemblies(assembly.MainModule, fullName);
+            if (type != null)
+            {
+                return type;
+            }
+
+            var runtime = ResolveAssembly(assembly, "Unimetry.Runtime");
+            return runtime != null ? FindTypeInRuntimeAssemblies(runtime.MainModule, fullName) : null;
+        }
+
+        private static TypeDefinition FindTypeInRuntimeAssemblies(ModuleDefinition module, string fullName)
+        {
+            for (var index = 0; index < RuntimeAssemblies.Length; index++)
+            {
+                var assemblyName = RuntimeAssemblies[index];
+                for (var referenceIndex = 0; referenceIndex < module.AssemblyReferences.Count; referenceIndex++)
                 {
-                    return type;
+                    var reference = module.AssemblyReferences[referenceIndex];
+                    if (reference.Name != assemblyName)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var resolved = module.AssemblyResolver.Resolve(reference);
+                        var type = resolved != null ? resolved.MainModule.GetType(fullName) : null;
+                        if (type != null)
+                        {
+                            return type;
+                        }
+                    }
+                    catch (AssemblyResolutionException)
+                    {
+                    }
+
+                    break;
                 }
             }
 
@@ -1173,10 +1238,18 @@ namespace Unimetry.Editor.Weaving
                 return null;
             }
 
+            var shortName = fullName;
+            var separator = fullName.LastIndexOf('.');
+            if (separator >= 0)
+            {
+                shortName = fullName.Substring(separator + 1);
+            }
+
             for (var index = 0; index < provider.CustomAttributes.Count; index++)
             {
                 var attribute = provider.CustomAttributes[index];
-                if (attribute.AttributeType.FullName == fullName)
+                if (attribute.AttributeType.Name == shortName &&
+                    attribute.AttributeType.FullName == fullName)
                 {
                     return attribute;
                 }
@@ -1230,41 +1303,6 @@ namespace Unimetry.Editor.Weaving
             }
 
             return new WeaveDiagnostic(message, file, line, column);
-        }
-
-        private readonly struct HandlerSnapshot
-        {
-            public HandlerSnapshot(
-                ExceptionHandlerType handlerType,
-                TypeReference catchType,
-                Instruction tryStart,
-                Instruction tryEnd,
-                Instruction handlerStart,
-                Instruction handlerEnd,
-                Instruction filterStart)
-            {
-                HandlerType = handlerType;
-                CatchType = catchType;
-                TryStart = tryStart;
-                TryEnd = tryEnd;
-                HandlerStart = handlerStart;
-                HandlerEnd = handlerEnd;
-                FilterStart = filterStart;
-            }
-
-            public ExceptionHandlerType HandlerType { get; }
-
-            public TypeReference CatchType { get; }
-
-            public Instruction TryStart { get; }
-
-            public Instruction TryEnd { get; }
-
-            public Instruction HandlerStart { get; }
-
-            public Instruction HandlerEnd { get; }
-
-            public Instruction FilterStart { get; }
         }
 
         private readonly struct TagSite
