@@ -197,7 +197,7 @@ using (var span = UnimetryTrace.Start("match.load"))
 }
 ```
 
-`ExtractTraceParent` は W3C `traceparent` を受けます。`FormatTraceParent` は現在の span を outgoing HTTP 用の `00-{trace}-{span}-01` にします。`Activity.Current` にトレースがあるときは、その trace id と親 span をエラーに使います。ゲームプレイ span は status OK の OTLP trace として送ります。baggage は span attribute にコピーします。`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` を `/v1/metrics` へ送ります。
+`ExtractTraceParent` は W3C `traceparent` を受けます。`FormatTraceParent` は現在の span を outgoing HTTP 用の `00-{trace}-{span}-01` にします。`Activity.Current` にトレースがあるときは、その trace id と親 span をエラーに使います。`System.Diagnostics.DiagnosticSource` があるときは `Runtime/link.xml` が IL2CPP 向けに `Activity` を残します。ゲームプレイ span は status OK の OTLP trace として送ります。baggage は span attribute にコピーします。`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` を `/v1/metrics` へ送ります。
 
 オフラインキューは AES-256-CBC と HMAC-SHA256 で暗号化します。鍵はキューの隣の `persistentDataPath/unimetry/offline.key` です。`queue.json` をそのまま読めなくします。ディレクトリごとコピーされた場合の保護にはなりません。
 

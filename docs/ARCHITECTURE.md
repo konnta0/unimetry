@@ -84,5 +84,6 @@ exporters:
 - `UnimetryEvent` — an OTel event with a start and an end. `[Event]` is woven by the Editor IL Post Processor
 - `CaptureNativeCrashes` / `AddBreadcrumb` — native crashes on Windows, macOS, and iOS players, uploaded on the next launch as `unimetry.record_type=crash`
 - `UnimetryTrace` — gameplay spans, W3C `traceparent`, and baggage
+- `Runtime/link.xml` — keeps `Activity` for IL2CPP when `System.Diagnostics.DiagnosticSource` is present
 - `CaptureMetrics` — FPS, managed memory, and startup duration on `/v1/metrics`
 - `UnimetrySettings` — Resources asset edited from Project Settings, used when `UNIMETRY_OTLP_ENDPOINT` is unset

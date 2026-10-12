@@ -197,7 +197,7 @@ using (var span = UnimetryTrace.Start("match.load"))
 }
 ```
 
-`ExtractTraceParent` accepts a W3C `traceparent`. `FormatTraceParent` writes the current span as `00-{trace}-{span}-01` for outgoing HTTP. Where `Activity.Current` has a trace, errors use that trace id and parent span. Gameplay spans export as OTLP traces with status OK. Baggage is copied onto span attributes. `CaptureMetrics` (default on) exports `unity.fps`, `unity.memory.used_bytes`, and `unity.startup.duration_s` to `/v1/metrics`.
+`ExtractTraceParent` accepts a W3C `traceparent`. `FormatTraceParent` writes the current span as `00-{trace}-{span}-01` for outgoing HTTP. Where `Activity.Current` has a trace, errors use that trace id and parent span. `Runtime/link.xml` keeps `Activity` for IL2CPP when `System.Diagnostics.DiagnosticSource` is present. Gameplay spans export as OTLP traces with status OK. Baggage is copied onto span attributes. `CaptureMetrics` (default on) exports `unity.fps`, `unity.memory.used_bytes`, and `unity.startup.duration_s` to `/v1/metrics`.
 
 The offline queue is encrypted with AES-256-CBC and HMAC-SHA256. The key file is `persistentDataPath/unimetry/offline.key`, next to the queue, so this stops casual reading of `queue.json` and does not protect a copy of the whole directory.
 

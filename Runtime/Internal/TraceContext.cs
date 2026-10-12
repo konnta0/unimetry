@@ -286,6 +286,7 @@ namespace Unimetry.Internal
             }
 
             activityLookupDone = true;
+            // IL2CPP keeps these types through Runtime/link.xml when DiagnosticSource is present.
             var activityType = Type.GetType("System.Diagnostics.Activity, System.Diagnostics.DiagnosticSource");
             if (activityType == null)
             {

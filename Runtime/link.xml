@@ -1,0 +1,7 @@
+<linker>
+  <assembly fullname="System.Diagnostics.DiagnosticSource" ignoreIfMissing="1">
+    <type fullname="System.Diagnostics.Activity" preserve="all" />
+    <type fullname="System.Diagnostics.ActivityTraceId" preserve="all" />
+    <type fullname="System.Diagnostics.ActivitySpanId" preserve="all" />
+  </assembly>
+</linker>
