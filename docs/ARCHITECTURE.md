@@ -43,7 +43,7 @@ sequenceDiagram
     end
 ```
 
-Native crashes do not go through this loop. A Windows unhandled-exception filter, or the macOS / iOS signal handler, writes `persistentDataPath/unimetry/crashes/*.crash.json`. The next launch reads that file and enqueues an OTLP log with `unimetry.record_type=crash`.
+Native crashes do not go through this loop. A Windows unhandled-exception filter, or the macOS / iOS / Android signal handler, writes `persistentDataPath/unimetry/crashes/*.crash.json`. The next launch reads that file and enqueues an OTLP log with `unimetry.record_type=crash`.
 
 ## Why both Logs and Traces
 
@@ -82,7 +82,7 @@ exporters:
 - `UnimetryOptions.Headers` — API gateway authentication
 - `UnimetryOptions.WithConsoleLog` / `WithLog` — copy error logs and events to the user's logger
 - `UnimetryEvent` — an OTel event with a start and an end. `[Event]` is woven by the Editor IL Post Processor
-- `CaptureNativeCrashes` / `AddBreadcrumb` — native crashes on Windows, macOS, and iOS players, uploaded on the next launch as `unimetry.record_type=crash`
+- `CaptureNativeCrashes` / `AddBreadcrumb` — native crashes on Windows, macOS, iOS, and Android players, uploaded on the next launch as `unimetry.record_type=crash`
 - `UnimetryTrace` — gameplay spans, W3C `traceparent`, and baggage
 - `Runtime/link.xml` — keeps `Activity` for IL2CPP when `System.Diagnostics.DiagnosticSource` is present
 - `CaptureMetrics` — FPS, managed memory, and startup duration on `/v1/metrics`

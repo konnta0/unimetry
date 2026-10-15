@@ -92,6 +92,37 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void Store_ReadsAndroidSignalArtifact()
+        {
+            var store = new CrashArtifactStore(root);
+            var id = "000000006ac676a200000a016aa83bcc";
+            var json = "{\"schema\":1,\"id\":\"" + id
+                + "\",\"capturedAtUnixMs\":1700000000000,\"signal\":\"0x0000000b\",\"exceptionType\":\"SIGSEGV\",\"message\":\"Native crash SIGSEGV\",\"threadName\":\"1\",\"registers\":\"pc=0x10\",\"managedStack\":\"\",\"breadcrumbs\":\"1000\\thello\",\"deviceModel\":\"Pixel\",\"osType\":\"android\",\"buildId\":\"build-test\",\"minidumpFile\":\"\",\"minidumpBytes\":0}";
+            File.WriteAllText(Path.Combine(root, id + ".crash.json"), json);
+
+            var pending = store.ReadPending();
+
+            Assert.AreEqual(1, pending.Count);
+            Assert.AreEqual("SIGSEGV", pending[0].exceptionType);
+            Assert.AreEqual("android", pending[0].osType);
+            Assert.AreEqual("Pixel", pending[0].deviceModel);
+        }
+
+        [Test]
+        public void Session_MapsEditorPlatform()
+        {
+            var session = CrashSession.FromUnity();
+#if UNITY_EDITOR_OSX
+            Assert.AreEqual("darwin", session.OsType);
+#elif UNITY_EDITOR_WIN
+            Assert.AreEqual("windows", session.OsType);
+#elif UNITY_EDITOR_LINUX
+            Assert.AreEqual("linux", session.OsType);
+#endif
+            Assert.IsFalse(string.IsNullOrEmpty(session.OsType));
+        }
+
+        [Test]
         public void Store_TrimsOldestArtifact()
         {
             var store = new CrashArtifactStore(root);

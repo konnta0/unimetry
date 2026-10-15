@@ -43,7 +43,7 @@ sequenceDiagram
     end
 ```
 
-ネイティブクラッシュはこのループを通りません。Windows の未処理例外フィルタ、または macOS / iOS のシグナルハンドラが `persistentDataPath/unimetry/crashes/*.crash.json` を書きます。次回起動でそのファイルを読み、`unimetry.record_type=crash` の OTLP Log としてキューに入れます。
+ネイティブクラッシュはこのループを通りません。Windows の未処理例外フィルタ、または macOS / iOS / Android のシグナルハンドラが `persistentDataPath/unimetry/crashes/*.crash.json` を書きます。次回起動でそのファイルを読み、`unimetry.record_type=crash` の OTLP Log としてキューに入れます。
 
 ## なぜ Log と Trace の両方か
 
@@ -82,7 +82,7 @@ exporters:
 - `UnimetryOptions.Headers` — API gateway 認証
 - `UnimetryOptions.WithConsoleLog` / `WithLog` — エラーログと Event をユーザーのロガーへ複製
 - `UnimetryEvent` — 開始と終了を持つ OTel Event。`[Event]` は Editor の IL Post Processor が織る
-- `CaptureNativeCrashes` / `AddBreadcrumb` — Windows、macOS、iOS プレイヤーのネイティブクラッシュ。次回起動時に `unimetry.record_type=crash` として送信
+- `CaptureNativeCrashes` / `AddBreadcrumb` — Windows、macOS、iOS、Android プレイヤーのネイティブクラッシュ。次回起動時に `unimetry.record_type=crash` として送信
 - `UnimetryTrace` — ゲームプレイ span、W3C `traceparent`、baggage
 - `Runtime/link.xml` — `System.Diagnostics.DiagnosticSource` があるとき、IL2CPP 向けに `Activity` を残す
 - `CaptureMetrics` — FPS、managed memory、起動時間を `/v1/metrics` へ送る

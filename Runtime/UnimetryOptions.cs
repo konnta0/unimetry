@@ -96,7 +96,7 @@ namespace Unimetry
         public UnimetryLogWriter LogWriter { get; set; }
 
         /// <summary>
-        /// When true, Windows standalone players record native crashes and upload them on the next launch.
+        /// When true, Windows, macOS, iOS, and Android players record native crashes and upload them on the next launch.
         /// Leave this false until the game's own consent UI allows crash collection.
         /// A launch with this set to false deletes crash artifacts and breadcrumb files left on disk.
         /// </summary>

@@ -6,7 +6,7 @@ Unity 向けのクラッシュ / エラー計装ライブラリ。管理例外�
 
 標準の OpenTelemetry .NET SDK に依存せず、Unity のランタイム制約（`Meter` 非対応、`DiagnosticSource` 限定など）を回避するため、最小限の OTLP エクスポーターを自前実装しています。
 
-## 現状のスコープ (v0.1)
+## 現状のスコープ (v0.2)
 
 | 対象 | 状態 |
 | --- | --- |
@@ -14,13 +14,13 @@ Unity 向けのクラッシュ / エラー計装ライブラリ。管理例外�
 | `AppDomain.UnhandledException` | 対応 |
 | `TaskScheduler.UnobservedTaskException` | 対応 |
 | 手動 `UnimetryClient.Report(...)` | 対応 |
-| `[Event]` / `UnimetryEvent.Begin` / `Start` / `Write` | 対応 |
+| `[Event]` / `UnimetryEvent.Begin` / `Start` / `Write` / 共通属性 | 対応 |
 | OTLP Logs (`/v1/logs`) | 対応 |
-| OTLP Traces (`/v1/traces`, エラー span) | 対応 |
+| OTLP Traces (`/v1/traces`, エラー / ゲームプレイ span) | 対応 |
+| OTLP Metrics (`/v1/metrics`) | 対応 |
+| W3C `traceparent` / `UnimetryTrace` | 対応 |
 | オフライン永続キュー + 再送 | 対応 |
-| Windows プレイヤーのネイティブクラッシュ | 対応 (opt-in、次回起動時に送信) |
-| iOS / Android / macOS のネイティブクラッシュ | **未対応** |
-| 既存 Trace コンテキストとの自動相関 | **未対応** (Phase 3) |
+| Windows / macOS / iOS / Android のネイティブクラッシュ | 対応 (opt-in、次回起動時に送信) |
 
 ## アーキテクチャ
 
@@ -168,7 +168,7 @@ service:
 
 ## ネイティブクラッシュ
 
-Windows スタンドアロンプレイヤーは、ネイティブクラッシュを記録し、次回起動時に送信できます。ゲーム側の同意 UI のあとで `CaptureNativeCrashes` を有効にするまで、キャプチャはオフです。iOS、Android、macOS はまだ対象外です。
+Windows、macOS、iOS、Android プレイヤーは、ネイティブクラッシュを記録し、次回起動時に送信できます。ゲーム側の同意 UI のあとで `CaptureNativeCrashes` を有効にするまで、キャプチャはオフです。Editor の Play ではネイティブハンドラは入りません。
 
 ```csharp
 UnimetryClient.Initialize(new UnimetryOptions
@@ -184,7 +184,7 @@ UnimetryClient.AddBreadcrumb("entered match");
 
 `AddBreadcrumb` は短い軌跡を保持します (既定は直近 30 秒、64 件)。ネイティブクラッシュキャプチャが無効のときは何もしません。未処理例外フィルタは Windows スタンドアロンプレイヤーにだけ入り、Editor では入りません。未処理のネイティブ例外は `persistentDataPath/unimetry/crashes/*.crash.json` に書かれます。次回起動時にキャプチャがまだ有効なら、`unimetry.record_type=crash`、`crash.signal`、`device.model`、`os.type`、`app.build_id` を付けた OTLP Log をキューへ入れます。`ExportErrorSpans` が true のときは `unity.crash` span を 1 本含めます。
 
-`CaptureMinidumps` はアーティファクトの隣にミニダンプを書きます。上限は `MaxMinidumpBytes` (既定 4 MiB、最大 32 MiB) です。ダンプはディスクに残り、OTLP ペイロードには埋め込みません。macOS と iOS プレイヤーは `Plugins/` のネイティブヘルパーで `SIGSEGV`、`SIGBUS`、`SIGABRT`、`SIGILL`、`SIGFPE` を記録します。Android は後回しです。キャプチャを無効にした起動では、残っているアーティファクト、ミニダンプ、breadcrumb ファイルを削除します。送信前に `Sanitizer` がクラッシュ本文、managed stack、breadcrumb テキストへ適用されます。
+`CaptureMinidumps` はアーティファクトの隣にミニダンプを書きます。上限は `MaxMinidumpBytes` (既定 4 MiB、最大 32 MiB) です。ダンプはディスクに残り、OTLP ペイロードには埋め込みません。ミニダンプは Windows のみです。macOS、iOS、Android プレイヤーは `Plugins/` のネイティブヘルパーで `SIGSEGV`、`SIGBUS`、`SIGABRT`、`SIGILL`、`SIGFPE` を記録します（macOS / Android は `libunimetry_crash`、iOS は静的ライブラリ）。`os.type` は `windows`、`darwin`、`ios`、`android` です。プラグインバイナリは `Native~/build.sh` で作ります（Android は NDK が必要。`ANDROID_NDK_HOME` か SDK の `ndk/`）。キャプチャを無効にした起動では、残っているアーティファクト、ミニダンプ、breadcrumb ファイルを削除します。送信前に `Sanitizer` がクラッシュ本文、managed stack、breadcrumb テキストへ適用されます。
 
 ## トレース、baggage、メトリクス
 

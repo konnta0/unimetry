@@ -1,4 +1,4 @@
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__ANDROID__)
 
 #include <errno.h>
 #include <stdio.h>
@@ -9,7 +9,11 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(__APPLE__)
 #include <sys/ucontext.h>
+#else
+#include <ucontext.h>
+#endif
 
 #define CRASH_PATH_MAX 512
 #define CRASH_JSON_MAX 8192
@@ -221,7 +225,13 @@ static void read_breadcrumbs(char* destination, size_t capacity)
 
 static void append_registers(char* destination, size_t capacity, size_t* used, ucontext_t* context)
 {
-    if (context == NULL || context->uc_mcontext == NULL)
+    if (context == NULL)
+    {
+        return;
+    }
+
+#if defined(__APPLE__)
+    if (context->uc_mcontext == NULL)
     {
         return;
     }
@@ -243,6 +253,29 @@ static void append_registers(char* destination, size_t capacity, size_t* used, u
     append_text(destination, capacity, used, " rax=0x");
     append_hex(destination, capacity, used, context->uc_mcontext->__ss.__rax, 16);
 #else
+    (void)used;
+#endif
+#elif defined(__ANDROID__) && defined(__aarch64__)
+    append_text(destination, capacity, used, "pc=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.pc, 16);
+    append_text(destination, capacity, used, " sp=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.sp, 16);
+    append_text(destination, capacity, used, " lr=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.regs[30], 16);
+    append_text(destination, capacity, used, " x0=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.regs[0], 16);
+#elif defined(__ANDROID__) && defined(__arm__)
+    append_text(destination, capacity, used, "pc=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.arm_pc, 8);
+    append_text(destination, capacity, used, " sp=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.arm_sp, 8);
+    append_text(destination, capacity, used, " lr=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.arm_lr, 8);
+    append_text(destination, capacity, used, " r0=0x");
+    append_hex(destination, capacity, used, context->uc_mcontext.arm_r0, 8);
+#else
+    (void)destination;
+    (void)capacity;
     (void)used;
 #endif
 }

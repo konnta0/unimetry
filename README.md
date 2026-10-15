@@ -6,7 +6,7 @@ A crash and error instrumentation library for Unity. It treats managed exception
 
 It does not depend on the standard OpenTelemetry .NET SDK. A minimal OTLP exporter is implemented in this package so it can run under Unity's runtime limits (no `Meter`, limited `DiagnosticSource`, and similar constraints).
 
-## Current scope (v0.1)
+## Current scope (v0.2)
 
 | Area | Status |
 | --- | --- |
@@ -14,13 +14,13 @@ It does not depend on the standard OpenTelemetry .NET SDK. A minimal OTLP export
 | `AppDomain.UnhandledException` | Supported |
 | `TaskScheduler.UnobservedTaskException` | Supported |
 | Manual `UnimetryClient.Report(...)` | Supported |
-| `[Event]` / `UnimetryEvent.Begin` / `Start` / `Write` | Supported |
+| `[Event]` / `UnimetryEvent.Begin` / `Start` / `Write` / common attributes | Supported |
 | OTLP Logs (`/v1/logs`) | Supported |
-| OTLP Traces (`/v1/traces`, error spans) | Supported |
+| OTLP Traces (`/v1/traces`, error and gameplay spans) | Supported |
+| OTLP Metrics (`/v1/metrics`) | Supported |
+| W3C `traceparent` / `UnimetryTrace` | Supported |
 | Offline persistent queue + retry | Supported |
-| Native crashes on Windows players | Supported (opt-in, uploaded on the next launch) |
-| Native crashes on iOS, Android, and macOS | **Not supported** |
-| Automatic correlation with an existing trace context | **Not supported** (Phase 3) |
+| Native crashes on Windows, macOS, iOS, and Android | Supported (opt-in, uploaded on the next launch) |
 
 ## Architecture
 
@@ -168,7 +168,7 @@ service:
 
 ## Native crashes
 
-Windows standalone players can record a native crash and upload it on the next launch. Capture stays off until the game sets `CaptureNativeCrashes` after its own consent UI. iOS, Android, and macOS are not captured yet.
+Windows, macOS, iOS, and Android players can record a native crash and upload it on the next launch. Capture stays off until the game sets `CaptureNativeCrashes` after its own consent UI. Editor play mode does not install a native handler.
 
 ```csharp
 UnimetryClient.Initialize(new UnimetryOptions
@@ -184,7 +184,7 @@ UnimetryClient.AddBreadcrumb("entered match");
 
 `AddBreadcrumb` keeps a short trail (last 30 seconds, 64 entries by default). It does nothing unless native crash capture is enabled. The unhandled-exception filter is installed only in Windows standalone players, not in the Editor. An unhandled native exception writes `persistentDataPath/unimetry/crashes/*.crash.json`. On the next launch, if capture is still enabled, Unimetry enqueues an OTLP log with `unimetry.record_type=crash`, `crash.signal`, `device.model`, `os.type`, and `app.build_id`. One `unity.crash` span is included when `ExportErrorSpans` is true.
 
-`CaptureMinidumps` writes a minidump beside the artifact, capped by `MaxMinidumpBytes` (default 4 MiB, maximum 32 MiB). The dump stays on disk and is not embedded in the OTLP payload. macOS and iOS players record `SIGSEGV`, `SIGBUS`, `SIGABRT`, `SIGILL`, and `SIGFPE` through the native helper in `Plugins/`. Android remains deferred. A launch that leaves capture disabled deletes leftover artifacts, minidumps, and the breadcrumb file. `Sanitizer` runs on the crash message, managed stack, and breadcrumb text before export.
+`CaptureMinidumps` writes a minidump beside the artifact, capped by `MaxMinidumpBytes` (default 4 MiB, maximum 32 MiB). The dump stays on disk and is not embedded in the OTLP payload. It is Windows-only. macOS, iOS, and Android players record `SIGSEGV`, `SIGBUS`, `SIGABRT`, `SIGILL`, and `SIGFPE` through the native helper in `Plugins/` (`libunimetry_crash` on macOS and Android, a static library on iOS). `os.type` is `windows`, `darwin`, `ios`, or `android`. Run `Native~/build.sh` to produce the plugin binaries (Android needs the NDK; `ANDROID_NDK_HOME` or the SDK `ndk/` folder). A launch that leaves capture disabled deletes leftover artifacts, minidumps, and the breadcrumb file. `Sanitizer` runs on the crash message, managed stack, and breadcrumb text before export.
 
 ## Traces, baggage, and metrics
 
