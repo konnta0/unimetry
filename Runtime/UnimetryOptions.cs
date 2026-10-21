@@ -76,6 +76,13 @@ namespace Unimetry
         public Func<CapturedError, CapturedError> Sanitizer { get; set; }
 
         /// <summary>
+        /// Optional predicate evaluated immediately before a captured error is queued.
+        /// Return false to suppress a source or payload. Use <see cref="CapturedError.Source"/>
+        /// to independently disable Unity logs, unhandled exceptions, task exceptions, or manual reports.
+        /// </summary>
+        public Func<CapturedError, bool> ErrorFilter { get; set; }
+
+        /// <summary>
         /// When true, <see cref="UnimetryEvent"/> records are buffered and exported as OTLP log events.
         /// </summary>
         public bool CaptureEvents { get; set; } = true;
@@ -86,7 +93,8 @@ namespace Unimetry
         public bool CaptureMetrics { get; set; } = true;
 
         /// <summary>
-        /// Maximum number of completed events retained in memory. Additional events are counted and dropped.
+        /// Maximum number of completed events retained in the encrypted offline event queue.
+        /// Additional events are counted and dropped.
         /// </summary>
         public int MaxEventBuffer { get; set; } = 1024;
 

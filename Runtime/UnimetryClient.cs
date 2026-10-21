@@ -12,6 +12,7 @@ namespace Unimetry
     {
         private static readonly object Gate = new();
         private static UnimetryRuntime runtime;
+        private static bool shuttingDown;
 
         /// <summary>
         /// Gets whether Unimetry has been initialized.
@@ -88,13 +89,80 @@ namespace Unimetry
         }
 
         /// <summary>
+        /// Sets or replaces a resource attribute for telemetry recorded after this call.
+        /// Passing <see langword="null"/> removes the attribute. Already queued records retain
+        /// the resource snapshot captured when they were recorded.
+        /// </summary>
+        public static void SetResourceAttribute(string key, string value)
+        {
+            GetRuntimeOrThrow().SetResourceAttribute(key, value);
+        }
+
+        /// <summary>
+        /// Flushes queued telemetry, then stops capture hooks and releases runtime resources.
+        /// </summary>
+        public static async Task ShutdownAsync(CancellationToken cancellationToken = default)
+        {
+            UnimetryRuntime current;
+            lock (Gate)
+            {
+                if (shuttingDown)
+                {
+                    throw new InvalidOperationException("Unimetry shutdown is already in progress.");
+                }
+
+                current = runtime;
+                if (current != null)
+                {
+                    shuttingDown = true;
+                }
+            }
+
+            if (current == null)
+            {
+                Internal.EventPipeline.Configure(null, null, false);
+                return;
+            }
+
+            try
+            {
+                await current.FlushAsync(cancellationToken).ConfigureAwait(true);
+            }
+            finally
+            {
+                lock (Gate)
+                {
+                    try
+                    {
+                        if (ReferenceEquals(runtime, current))
+                        {
+                            Volatile.Write(ref runtime, null);
+                        }
+
+                        current.Dispose();
+                    }
+                    finally
+                    {
+                        shuttingDown = false;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Stops capture hooks and releases runtime resources.
-        /// Events still sitting in memory are discarded. Call <see cref="FlushAsync"/> first to export them.
+        /// Queued errors, spans, and events remain encrypted on disk for the next initialization.
+        /// Use <see cref="ShutdownAsync"/> when the caller can await a final network flush.
         /// </summary>
         public static void Shutdown()
         {
             lock (Gate)
             {
+                if (shuttingDown)
+                {
+                    throw new InvalidOperationException("Unimetry shutdown is already in progress.");
+                }
+
                 var current = runtime;
                 Volatile.Write(ref runtime, null);
                 if (current != null)

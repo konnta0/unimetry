@@ -20,6 +20,7 @@ namespace Unimetry
         internal string ExceptionMessage;
         internal string ExceptionStack;
         internal bool ExceptionEscaped;
+        internal ResourceSnapshot Resource;
         internal EventTag[] Tags;
         internal bool Active;
 
@@ -161,6 +162,7 @@ namespace Unimetry
             ExceptionMessage = null;
             ExceptionStack = null;
             ExceptionEscaped = false;
+            Resource = EventPipeline.CaptureResource();
             Active = true;
         }
 
@@ -175,6 +177,7 @@ namespace Unimetry
             ExceptionMessage = null;
             ExceptionStack = null;
             ExceptionEscaped = false;
+            Resource = null;
             Active = false;
             for (var index = 0; index < Tags.Length; index++)
             {

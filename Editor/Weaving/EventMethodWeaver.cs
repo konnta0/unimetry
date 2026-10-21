@@ -835,7 +835,10 @@ namespace Unimetry.Editor.Weaving
             return name == "System.Runtime.CompilerServices.AsyncTaskMethodBuilder" ||
                    name == "System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1" ||
                    name == "System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder" ||
-                   name == "System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder`1";
+                   name == "System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder`1" ||
+                   name == "Cysharp.Threading.Tasks.CompilerServices.AsyncUniTaskMethodBuilder" ||
+                   name == "Cysharp.Threading.Tasks.CompilerServices.AsyncUniTaskMethodBuilder`1" ||
+                   name == "Cysharp.Threading.Tasks.CompilerServices.AsyncUniTaskVoidMethodBuilder";
         }
 
         private static bool SameType(TypeReference left, TypeReference right)

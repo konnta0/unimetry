@@ -78,7 +78,9 @@ exporters:
 ## Extension points
 
 - `UnimetryOptions.Sanitizer` — redact payloads before send
+- `UnimetryOptions.ErrorFilter` — suppress selected capture sources before queueing
 - `UnimetryOptions.ResourceAttributes` — extra resource attributes such as `game.session_id`
+- `UnimetryClient.SetResourceAttribute` — update identity after login; queued records retain their captured resource
 - `UnimetryOptions.Headers` — API gateway authentication
 - `UnimetryOptions.WithConsoleLog` / `WithLog` — copy error logs and events to the user's logger
 - `UnimetryEvent` — an OTel event with a start and an end. `[Event]` is woven by the Editor IL Post Processor

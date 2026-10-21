@@ -11,6 +11,7 @@ namespace Unimetry.Internal
         private readonly OtlpExporter exporter;
         private readonly UnimetryOptions options;
         private readonly EventBuffer eventBuffer;
+        private readonly ResourceState resourceState;
         private readonly Action beforeFlush;
         private readonly EventRecord[] eventBatch;
         private CancellationTokenSource cancellationTokenSource;
@@ -28,12 +29,14 @@ namespace Unimetry.Internal
             OtlpExporter exporter,
             UnimetryOptions options,
             EventBuffer eventBuffer,
+            ResourceState resourceState,
             Action beforeFlush)
         {
             this.queue = queue;
             this.exporter = exporter;
             this.options = options;
             this.eventBuffer = eventBuffer;
+            this.resourceState = resourceState;
             this.beforeFlush = beforeFlush;
             eventBatch = new EventRecord[options.MaxBatchSize];
             for (var index = 0; index < eventBatch.Length; index++)
@@ -98,7 +101,17 @@ namespace Unimetry.Internal
                         return;
                     }
 
-                    var exported = await exporter.ExportAsync(batch, eventBatch, eventCount, cancellationToken).ConfigureAwait(true);
+                    bool exported;
+                    try
+                    {
+                        exported = await exporter.ExportAsync(batch, eventBatch, eventCount, cancellationToken).ConfigureAwait(true);
+                    }
+                    catch
+                    {
+                        queue.RequeueFront(batch);
+                        throw;
+                    }
+
                     if (!exported)
                     {
                         queue.RequeueFront(batch);
@@ -178,6 +191,7 @@ namespace Unimetry.Internal
             }
 
             var payload = OtlpJsonWriter.BuildMetricsPayload(
+                resourceState?.Capture(),
                 options,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_000_000L,
                 frames,

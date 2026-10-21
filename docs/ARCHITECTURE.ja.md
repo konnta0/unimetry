@@ -78,7 +78,9 @@ exporters:
 ## 拡張ポイント
 
 - `UnimetryOptions.Sanitizer` — 送信前 redaction
+- `UnimetryOptions.ErrorFilter` — capture source ごとの送信前フィルター
 - `UnimetryOptions.ResourceAttributes` — `game.session_id` 等
+- `UnimetryClient.SetResourceAttribute` — ログイン後の identity 更新。記録済みデータの resource は変わらない
 - `UnimetryOptions.Headers` — API gateway 認証
 - `UnimetryOptions.WithConsoleLog` / `WithLog` — エラーログと Event をユーザーのロガーへ複製
 - `UnimetryEvent` — 開始と終了を持つ OTel Event。`[Event]` は Editor の IL Post Processor が織る

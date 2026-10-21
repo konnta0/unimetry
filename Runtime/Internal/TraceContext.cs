@@ -15,16 +15,19 @@ namespace Unimetry.Internal
         private static readonly object BaggageGate = new object();
         private static readonly List<KeyValuePair<string, string>> BaggageItems = new List<KeyValuePair<string, string>>(MaxBaggage);
         private static Action<PendingExport> spanRecorder;
+        private static Func<ResourceSnapshot> resourceProvider;
 
-        public static void SetSpanRecorder(Action<PendingExport> recorder)
+        public static void SetSpanRecorder(Action<PendingExport> recorder, Func<ResourceSnapshot> provider = null)
         {
             spanRecorder = recorder;
+            resourceProvider = provider;
         }
 
         public static void Clear()
         {
             Slot.Value = null;
             spanRecorder = null;
+            resourceProvider = null;
             lock (BaggageGate)
             {
                 BaggageItems.Clear();
@@ -139,7 +142,13 @@ namespace Unimetry.Internal
                 Previous = Slot.Value,
             };
             var startNano = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_000_000L;
-            return new UnimetrySpan(name, traceId, spanId, parentSpan ?? string.Empty, startNano);
+            return new UnimetrySpan(
+                name,
+                traceId,
+                spanId,
+                parentSpan ?? string.Empty,
+                startNano,
+                resourceProvider?.Invoke());
         }
 
         public static void Complete(UnimetrySpan span)
@@ -181,6 +190,7 @@ namespace Unimetry.Internal
                 SpanName = span.Name,
                 SpanStatusCode = 1,
                 Baggage = FormatBaggage(),
+                Resource = span.Resource,
             };
             spanRecorder?.Invoke(export);
         }

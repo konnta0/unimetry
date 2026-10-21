@@ -1,3 +1,5 @@
+using System;
+
 namespace Unimetry.Internal
 {
     internal enum EventTagKind : byte
@@ -9,6 +11,7 @@ namespace Unimetry.Internal
         Double = 4,
     }
 
+    [Serializable]
     internal struct EventTag
     {
         public string Key;
@@ -72,6 +75,7 @@ namespace Unimetry.Internal
         }
     }
 
+    [Serializable]
     internal struct EventRecord
     {
         public string Name;
@@ -87,5 +91,13 @@ namespace Unimetry.Internal
         public EventTag[] Tags;
         public int CommonTagCount;
         public EventTag[] CommonTags;
+        public ResourceSnapshot Resource;
+    }
+
+    [Serializable]
+    internal sealed class EventRecordEnvelope
+    {
+        public EventRecord[] Items = Array.Empty<EventRecord>();
+        public int Dropped;
     }
 }

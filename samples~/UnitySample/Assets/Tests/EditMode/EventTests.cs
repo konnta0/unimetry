@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -12,6 +13,16 @@ namespace Unimetry.Tests
 {
     public sealed class EventTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            var eventPath = Path.Combine(Application.persistentDataPath, "unimetry", "events.json");
+            if (File.Exists(eventPath))
+            {
+                File.Delete(eventPath);
+            }
+        }
+
         [TearDown]
         public void TearDown()
         {
@@ -156,6 +167,44 @@ namespace Unimetry.Tests
             Assert.AreEqual("System.InvalidOperationException", records[0].ExceptionType);
             Assert.AreEqual("boom", records[0].ExceptionMessage);
             Assert.IsFalse(records[0].ExceptionEscaped);
+        }
+
+        [Test]
+        public void RecordException_AppliesSanitizer()
+        {
+            Initialize(sanitizer: captured => new CapturedError(
+                captured.Message,
+                captured.Severity,
+                captured.Source,
+                captured.ExceptionType,
+                "redacted-stack",
+                captured.ThreadName,
+                captured.IsTerminating,
+                captured.Fingerprint,
+                captured.TraceId,
+                captured.SpanId,
+                captured.CapturedAtUtc));
+
+            using (var scope = UnimetryEvent.Begin("manual.sanitized"))
+            {
+                scope.RecordException(new InvalidOperationException("sensitive"));
+            }
+
+            Assert.AreEqual("redacted-stack", Copy()[0].ExceptionStack);
+        }
+
+        [Test]
+        public void CompletedEvent_SurvivesShutdownAndReinitialize()
+        {
+            Initialize();
+            UnimetryEvent.Write("persisted.event");
+            UnimetryClient.Shutdown();
+
+            Initialize();
+
+            var records = Copy();
+            Assert.AreEqual(1, records.Length);
+            Assert.AreEqual("persisted.event", records[0].Name);
         }
 
         [Test]
@@ -334,7 +383,8 @@ namespace Unimetry.Tests
             int maxEventBuffer = 32,
             bool captureEvents = true,
             bool console = false,
-            UnimetryLogWriter writer = null)
+            UnimetryLogWriter writer = null,
+            Func<CapturedError, CapturedError> sanitizer = null)
         {
             var options = new UnimetryOptions
             {
@@ -344,6 +394,7 @@ namespace Unimetry.Tests
                 FlushInterval = TimeSpan.FromHours(1),
                 MaxEventBuffer = maxEventBuffer,
                 CaptureEvents = captureEvents,
+                Sanitizer = sanitizer,
             };
             if (console)
             {

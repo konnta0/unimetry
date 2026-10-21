@@ -91,7 +91,7 @@ namespace Unimetry.Editor.Weaving
                 assembly = AssemblyDefinition.ReadAssembly(new MemoryStream(pe), readerParameters);
                 if (!EventMethodWeaver.TryCreateHooks(assembly, out var hooks, out var hookError))
                 {
-                    return Result(pe, pdb, Warning(hookError));
+                    return Result(pe, pdb, Error(hookError));
                 }
 
                 var diagnostics = new List<WeaveDiagnostic>();
@@ -149,7 +149,7 @@ namespace Unimetry.Editor.Weaving
             }
             catch (Exception exception)
             {
-                return Result(pe, pdb, Warning("Unimetry event weaver failed: " + exception.Message));
+                return Result(pe, pdb, Error("Unimetry event weaver failed: " + exception.Message));
             }
             finally
             {
@@ -202,13 +202,13 @@ namespace Unimetry.Editor.Weaving
             return new ILPostProcessResult(new InMemoryAssembly(pe, pdb), diagnostics);
         }
 
-        private static List<DiagnosticMessage> Warning(string message)
+        private static List<DiagnosticMessage> Error(string message)
         {
             return new List<DiagnosticMessage>
             {
                 new DiagnosticMessage
                 {
-                    DiagnosticType = DiagnosticType.Warning,
+                    DiagnosticType = DiagnosticType.Error,
                     MessageData = message,
                 },
             };
@@ -227,7 +227,9 @@ namespace Unimetry.Editor.Weaving
                 var diagnostic = diagnostics[index];
                 messages.Add(new DiagnosticMessage
                 {
-                    DiagnosticType = DiagnosticType.Warning,
+                    DiagnosticType = diagnostic.Message.StartsWith("UM004:", StringComparison.Ordinal)
+                        ? DiagnosticType.Error
+                        : DiagnosticType.Warning,
                     MessageData = diagnostic.Message,
                     File = diagnostic.File,
                     Line = diagnostic.Line,

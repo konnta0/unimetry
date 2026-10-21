@@ -129,9 +129,21 @@ using (var click = UnimetryEvent.Begin("ui.button.click"))
 }
 ```
 
-`[Event]` は Unity の IL Post Processor が織ります。同期メソッドはユーザー本体を複製せず、ブレークポイントが実際に走る IL に載ります。capture が無効なときは割り当てしません。generic method、iterator、`async void`、local function は対象外で、警告を出してメソッドはそのまま残します。`UNIMETRY_DISABLE_EVENT_WEAVE` を定義すると織り込みを止めます。タグに使える型は `string`、`bool`、`int`、`long`、`double` です。
+`[Event]` は Unity の IL Post Processor が織ります。`Task`、`ValueTask`、UniTask の async state machine に対応します。同期メソッドはユーザー本体を複製せず、ブレークポイントが実際に走る IL に載ります。capture が無効なときは割り当てしません。generic method、iterator、`async void`、local function は `UM004` compiler error にして、計測が静かに消えないようにします。`UNIMETRY_DISABLE_EVENT_WEAVE` を定義すると織り込みを止めます。タグに使える型は `string`、`bool`、`int`、`long`、`double` です。
 
-高頻度の Event はディスクへ書かず、メモリ上のリングバッファから `/v1/logs` に送ります。溢れた分は捨てて件数だけ数えます。`Shutdown` の前に `FlushAsync` を呼ぶと、残っている Event を送れます。
+完了した Event は `persistentDataPath/unimetry` 以下へ暗号化して永続化し、`/v1/logs` に送ります。上限を超えた分は捨てて件数を数えます。`Shutdown` 後も未送信分はディスクに残ります。最後のネットワーク flush を待てる場合は `await UnimetryClient.ShutdownAsync()` を使ってください。
+
+resource 属性は error、span、Event の記録時にスナップショットします。別アカウントの未送信データが、後からログインしたアカウントの identity で送られることはありません。再初期化せずに identity を更新できます。
+
+```csharp
+UnimetryClient.SetResourceAttribute("app.user_id", userId); // null で削除
+```
+
+`Sanitizer` は Event に付いた例外にも適用されます。`ErrorFilter` を使うと、自動捕捉の経路を永続キューへ入る前に停止できます。
+
+```csharp
+options.ErrorFilter = error => error.Source != CapturedErrorSource.UnityLog;
+```
 
 ### 環境変数による自動初期化
 

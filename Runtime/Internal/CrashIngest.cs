@@ -7,7 +7,11 @@ namespace Unimetry.Internal
     {
         private const long MaxSafeUnixMilliseconds = 9_223_372_036_854L;
 
-        public static int EnqueuePending(CrashArtifactStore store, PersistentQueue queue, UnimetryOptions options)
+        public static int EnqueuePending(
+            CrashArtifactStore store,
+            PersistentQueue queue,
+            UnimetryOptions options,
+            ResourceSnapshot resource = null)
         {
             if (store == null || queue == null || options == null)
             {
@@ -28,6 +32,13 @@ namespace Unimetry.Internal
                 var export = ToPendingExport(artifact, options);
                 if (export != null)
                 {
+                    export.Resource = resource ?? ResourceSnapshot.FromOptions(options);
+                    if (!ShouldExport(options, export.ToCapturedError()))
+                    {
+                        store.DeleteJson(artifact);
+                        continue;
+                    }
+
                     queue.Enqueue(export);
                     Emit(export, options);
                     enqueued++;
@@ -152,6 +163,24 @@ namespace Unimetry.Internal
             {
                 Debug.LogWarning("Unimetry crash sanitizer failed: " + exception.Message);
                 return captured;
+            }
+        }
+
+        private static bool ShouldExport(UnimetryOptions options, CapturedError captured)
+        {
+            if (options.ErrorFilter == null)
+            {
+                return true;
+            }
+
+            try
+            {
+                return options.ErrorFilter(captured);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Unimetry error filter failed: " + exception.Message);
+                return true;
             }
         }
 

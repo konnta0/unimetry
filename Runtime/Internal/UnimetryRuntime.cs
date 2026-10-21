@@ -16,22 +16,24 @@ namespace Unimetry.Internal
         private readonly EventBuffer eventBuffer;
         private readonly CrashArtifactStore crashStore;
         private readonly BreadcrumbLog breadcrumbs;
+        private readonly ResourceState resourceState;
         private int crashIngested;
         private bool started;
 
         public UnimetryRuntime(UnimetryOptions options)
         {
             this.options = options;
+            resourceState = new ResourceState(options);
             queue = new PersistentQueue(options.MaxQueueSize);
             exporter = new OtlpExporter(options);
-            eventBuffer = new EventBuffer(options.MaxEventBuffer);
+            eventBuffer = new EventBuffer(options.MaxEventBuffer, resourceState, options.Sanitizer);
             var root = Path.Combine(Application.persistentDataPath, "unimetry");
             crashStore = new CrashArtifactStore(Path.Combine(root, "crashes"));
             breadcrumbs = new BreadcrumbLog(
                 options.BreadcrumbCapacity,
                 options.BreadcrumbWindow,
                 Path.Combine(root, "breadcrumbs.txt"));
-            flusher = new BackgroundFlusher(queue, exporter, options, eventBuffer, IngestPreviousCrashes);
+            flusher = new BackgroundFlusher(queue, exporter, options, eventBuffer, resourceState, IngestPreviousCrashes);
             errorCapture = new ErrorCapture(options, EnqueueCapturedError);
         }
 
@@ -44,7 +46,7 @@ namespace Unimetry.Internal
 
             started = true;
             EventPipeline.Configure(eventBuffer, options.LogWriter, options.CaptureEvents);
-            TraceContext.SetSpanRecorder(EnqueueSpan);
+            TraceContext.SetSpanRecorder(EnqueueSpan, resourceState.Capture);
             if (options.CaptureNativeCrashes)
             {
                 crashStore.EnsureDirectory();
@@ -93,7 +95,7 @@ namespace Unimetry.Internal
                     return;
                 }
 
-                CrashIngest.EnqueuePending(crashStore, queue, options);
+                CrashIngest.EnqueuePending(crashStore, queue, options, resourceState.Capture());
                 WindowsCrashHandler.EnsureInstalled();
             }
             catch (Exception exception)
@@ -106,6 +108,11 @@ namespace Unimetry.Internal
         public Task FlushAsync(CancellationToken cancellationToken)
         {
             return flusher.FlushAsync(cancellationToken);
+        }
+
+        public void SetResourceAttribute(string key, string value)
+        {
+            resourceState.Set(key, value);
         }
 
         public void Dispose()
@@ -125,7 +132,12 @@ namespace Unimetry.Internal
                 return;
             }
 
-            var sanitized = options.Sanitizer?.Invoke(capturedError) ?? capturedError;
+            if (!ShouldExport(capturedError))
+            {
+                return;
+            }
+
+            var sanitized = ApplySanitizer(capturedError);
             var unixNano = sanitized.CapturedAtUtc.ToUnixTimeMilliseconds() * 1_000_000L;
             var severity = sanitized.Severity == CapturedErrorSeverity.Fatal
                 ? UnimetrySeverity.Fatal
@@ -141,6 +153,7 @@ namespace Unimetry.Internal
             var export = PendingExport.FromCapturedError(sanitized, options.ExportErrorSpans);
             export.ParentSpanId = parentSpanId ?? string.Empty;
             export.Baggage = TraceContext.FormatBaggage();
+            export.Resource = resourceState.Capture();
             queue.Enqueue(export);
         }
 
@@ -151,7 +164,47 @@ namespace Unimetry.Internal
                 return;
             }
 
+            if (export.Resource == null)
+            {
+                export.Resource = resourceState.Capture();
+            }
             queue.Enqueue(export);
+        }
+
+        private bool ShouldExport(CapturedError captured)
+        {
+            if (options.ErrorFilter == null)
+            {
+                return true;
+            }
+
+            try
+            {
+                return options.ErrorFilter(captured);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Unimetry error filter failed: " + exception.Message);
+                return true;
+            }
+        }
+
+        private CapturedError ApplySanitizer(CapturedError captured)
+        {
+            if (options.Sanitizer == null)
+            {
+                return captured;
+            }
+
+            try
+            {
+                return options.Sanitizer(captured) ?? captured;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Unimetry sanitizer failed: " + exception.Message);
+                return captured;
+            }
         }
     }
 

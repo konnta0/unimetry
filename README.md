@@ -129,9 +129,21 @@ using (var click = UnimetryEvent.Begin("ui.button.click"))
 }
 ```
 
-`[Event]` is woven by Unity's IL Post Processor. Woven synchronous methods keep a single body so breakpoints bind to the IL that actually runs; disabled capture still allocates nothing. Generic methods, iterators, `async void`, and local functions are left unchanged and produce a warning. Define `UNIMETRY_DISABLE_EVENT_WEAVE` to disable weaving. Tag types are `string`, `bool`, `int`, `long`, and `double`.
+`[Event]` is woven by Unity's IL Post Processor. `Task`, `ValueTask`, and UniTask async state machines are supported. Woven synchronous methods keep a single body so breakpoints bind to the IL that actually runs; disabled capture still allocates nothing. Generic methods, iterators, `async void`, and local functions are rejected with the `UM004` compiler error so instrumentation cannot silently disappear. Define `UNIMETRY_DISABLE_EVENT_WEAVE` to disable weaving. Tag types are `string`, `bool`, `int`, `long`, and `double`.
 
-High-frequency events are not written to disk. They are sent to `/v1/logs` from an in-memory ring buffer. Overflow is dropped and only the drop count is kept. Call `FlushAsync` before `Shutdown` to send events that are still buffered.
+Completed events are encrypted and persisted under `persistentDataPath/unimetry`, then sent to `/v1/logs`. Overflow is dropped and counted. `Shutdown` leaves unsent data on disk; prefer `await UnimetryClient.ShutdownAsync()` when a final network flush is possible.
+
+Resource attributes are snapshotted when each error, span, or event is recorded. This prevents offline telemetry from one signed-in account being exported with a later account's identity. Update identity without reinitializing:
+
+```csharp
+UnimetryClient.SetResourceAttribute("app.user_id", userId); // null removes it
+```
+
+`Sanitizer` also applies to exceptions attached to events. `ErrorFilter` can suppress automatic capture routes before they enter the persistent queue:
+
+```csharp
+options.ErrorFilter = error => error.Source != CapturedErrorSource.UnityLog;
+```
 
 ### Automatic initialization from environment variables
 

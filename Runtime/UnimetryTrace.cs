@@ -71,13 +71,20 @@ namespace Unimetry
         private readonly long startUnixNano;
         private int disposed;
 
-        internal UnimetrySpan(string name, string traceId, string spanId, string parentSpanId, long startUnixNano)
+        internal UnimetrySpan(
+            string name,
+            string traceId,
+            string spanId,
+            string parentSpanId,
+            long startUnixNano,
+            ResourceSnapshot resource = null)
         {
             Name = name ?? string.Empty;
             TraceId = traceId ?? string.Empty;
             SpanId = spanId ?? string.Empty;
             ParentSpanId = parentSpanId ?? string.Empty;
             this.startUnixNano = startUnixNano;
+            Resource = resource;
         }
 
         internal static UnimetrySpan Inactive { get; } = new UnimetrySpan(string.Empty, string.Empty, string.Empty, string.Empty, 0);
@@ -95,6 +102,8 @@ namespace Unimetry
         public string ParentSpanId { get; }
 
         internal long StartUnixNano => startUnixNano;
+
+        internal ResourceSnapshot Resource { get; }
 
         /// <summary>Ends the span and queues it for export.</summary>
         public void Dispose()

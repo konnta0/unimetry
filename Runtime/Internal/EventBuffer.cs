@@ -1,3 +1,7 @@
+using System;
+using System.IO;
+using UnityEngine;
+
 namespace Unimetry.Internal
 {
     internal sealed class EventBuffer
@@ -6,19 +10,34 @@ namespace Unimetry.Internal
 
         private readonly EventRecord[] records;
         private readonly object gate = new object();
+        private readonly ResourceState resourceState;
+        private readonly Func<CapturedError, CapturedError> sanitizer;
+        private readonly string storagePath;
+        private readonly string keyPath;
         private int head;
         private int tail;
         private int count;
         private int dropped;
 
-        public EventBuffer(int capacity)
+        public EventBuffer(
+            int capacity,
+            ResourceState resourceState = null,
+            Func<CapturedError, CapturedError> sanitizer = null,
+            string storagePath = null)
         {
+            this.resourceState = resourceState;
+            this.sanitizer = sanitizer;
+            var root = Path.Combine(Application.persistentDataPath, "unimetry");
+            this.storagePath = storagePath ?? Path.Combine(root, "events.json");
+            keyPath = Path.Combine(root, "offline.key");
             records = new EventRecord[capacity];
             for (var index = 0; index < records.Length; index++)
             {
                 records[index].Tags = new EventTag[MaxTags];
                 records[index].CommonTags = new EventTag[EventAttributes.MaxCount];
             }
+
+            LoadFromDisk();
         }
 
         public int Dropped
@@ -43,6 +62,8 @@ namespace Unimetry.Internal
                 }
 
                 CopyHandle(handle, endUnixNano, ref records[tail]);
+                SanitizeException(ref records[tail], endUnixNano);
+                records[tail].Resource = handle.Resource;
                 tail++;
                 if (tail == records.Length)
                 {
@@ -50,6 +71,7 @@ namespace Unimetry.Internal
                 }
 
                 count++;
+                SaveToDiskLocked();
             }
         }
 
@@ -70,6 +92,7 @@ namespace Unimetry.Internal
                 slot.EndUnixNano = unixNano;
                 slot.SeverityNumber = (int)UnimetrySeverity.Info;
                 EventAttributes.Apply(ref slot, explicitCount: 0);
+                slot.Resource = resourceState?.Capture();
                 tail++;
                 if (tail == records.Length)
                 {
@@ -77,6 +100,7 @@ namespace Unimetry.Internal
                 }
 
                 count++;
+                SaveToDiskLocked();
             }
         }
 
@@ -105,6 +129,11 @@ namespace Unimetry.Internal
             }
         }
 
+        internal ResourceSnapshot CaptureResource()
+        {
+            return resourceState?.Capture();
+        }
+
         public void Commit(int commitCount)
         {
             lock (gate)
@@ -124,6 +153,11 @@ namespace Unimetry.Internal
                     }
 
                     count--;
+                }
+
+                if (commitCount > 0)
+                {
+                    SaveToDiskLocked();
                 }
             }
         }
@@ -174,6 +208,7 @@ namespace Unimetry.Internal
             }
 
             destination.CommonTagCount = source.CommonTagCount;
+            destination.Resource = source.Resource;
             if (destination.CommonTags == null || source.CommonTags == null)
             {
                 return;
@@ -202,6 +237,7 @@ namespace Unimetry.Internal
             slot.ExceptionStack = null;
             slot.ExceptionEscaped = false;
             slot.DroppedTags = 0;
+            slot.Resource = null;
             var tagCount = slot.TagCount;
             slot.TagCount = 0;
             if (slot.Tags == null)
@@ -224,6 +260,134 @@ namespace Unimetry.Internal
             for (var index = 0; index < commonCount; index++)
             {
                 slot.CommonTags[index] = default;
+            }
+        }
+
+        private void SanitizeException(ref EventRecord record, long capturedAtUnixNano)
+        {
+            if (sanitizer == null || string.IsNullOrEmpty(record.ExceptionType))
+            {
+                return;
+            }
+
+            try
+            {
+                var capturedAt = DateTimeOffset.FromUnixTimeMilliseconds(capturedAtUnixNano / 1_000_000L);
+                var captured = new CapturedError(
+                    record.ExceptionMessage,
+                    CapturedErrorSeverity.Exception,
+                    CapturedErrorSource.Event,
+                    record.ExceptionType,
+                    record.ExceptionStack,
+                    string.Empty,
+                    record.ExceptionEscaped,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    capturedAt);
+                var sanitized = sanitizer(captured) ?? captured;
+                record.ExceptionType = sanitized.ExceptionType;
+                record.ExceptionMessage = sanitized.Message;
+                record.ExceptionStack = sanitized.StackTrace;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Unimetry event sanitizer failed: " + exception.Message);
+            }
+        }
+
+        private void LoadFromDisk()
+        {
+            try
+            {
+                if (!File.Exists(storagePath))
+                {
+                    return;
+                }
+
+                var json = OfflineProtector.Unprotect(File.ReadAllBytes(storagePath), keyPath);
+                var envelope = string.IsNullOrEmpty(json) ? null : JsonUtility.FromJson<EventRecordEnvelope>(json);
+                if (envelope?.Items == null)
+                {
+                    return;
+                }
+
+                dropped = envelope.Dropped;
+                var start = Math.Max(0, envelope.Items.Length - records.Length);
+                for (var index = start; index < envelope.Items.Length; index++)
+                {
+                    ref var slot = ref records[tail];
+                    CopyLoaded(envelope.Items[index], ref slot);
+                    tail = (tail + 1) % records.Length;
+                    count++;
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Unimetry failed to load persisted events: " + exception.Message);
+            }
+        }
+
+        private void SaveToDiskLocked()
+        {
+            try
+            {
+                if (count == 0)
+                {
+                    AtomicFile.TryDelete(storagePath);
+                    return;
+                }
+
+                var envelope = new EventRecordEnvelope
+                {
+                    Items = new EventRecord[count],
+                    Dropped = dropped,
+                };
+                for (var index = 0; index < count; index++)
+                {
+                    var sourceIndex = (head + index) % records.Length;
+                    envelope.Items[index] = records[sourceIndex];
+                }
+
+                var directory = Path.GetDirectoryName(storagePath);
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                File.WriteAllBytes(
+                    storagePath,
+                    OfflineProtector.Protect(JsonUtility.ToJson(envelope), keyPath));
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Unimetry failed to persist events: " + exception.Message);
+            }
+        }
+
+        private static void CopyLoaded(EventRecord source, ref EventRecord destination)
+        {
+            ClearSlot(ref destination);
+            destination.Name = source.Name;
+            destination.StartUnixNano = source.StartUnixNano;
+            destination.EndUnixNano = source.EndUnixNano;
+            destination.SeverityNumber = source.SeverityNumber;
+            destination.ExceptionType = source.ExceptionType;
+            destination.ExceptionMessage = source.ExceptionMessage;
+            destination.ExceptionStack = source.ExceptionStack;
+            destination.ExceptionEscaped = source.ExceptionEscaped;
+            destination.DroppedTags = source.DroppedTags;
+            destination.Resource = source.Resource;
+            destination.TagCount = Math.Min(source.TagCount, MaxTags);
+            for (var index = 0; index < destination.TagCount && source.Tags != null; index++)
+            {
+                destination.Tags[index] = source.Tags[index];
+            }
+
+            destination.CommonTagCount = Math.Min(source.CommonTagCount, EventAttributes.MaxCount);
+            for (var index = 0; index < destination.CommonTagCount && source.CommonTags != null; index++)
+            {
+                destination.CommonTags[index] = source.CommonTags[index];
             }
         }
     }

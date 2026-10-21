@@ -74,6 +74,51 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void BuildLogsPayload_GroupsRecordsByCapturedResource()
+        {
+            var options = CreateOptions();
+            var first = CreatePendingExport();
+            first.Message = "account-a-record";
+            first.Resource = ResourceSnapshot.FromDictionary(new Dictionary<string, string>
+            {
+                ["service.name"] = "unimetry-test",
+                ["app.user_id"] = "account-a",
+            });
+            var second = CreatePendingExport();
+            second.Message = "account-b-record";
+            second.Resource = ResourceSnapshot.FromDictionary(new Dictionary<string, string>
+            {
+                ["service.name"] = "unimetry-test",
+                ["app.user_id"] = "account-b",
+            });
+
+            var payload = OtlpJsonWriter.BuildLogsPayload(
+                new List<PendingExport> { first, second },
+                options);
+
+            Assert.AreEqual(2, Count(payload, "\"resource\""));
+            StringAssert.Contains("account-a", payload);
+            StringAssert.Contains("account-b", payload);
+        }
+
+        [Test]
+        public void BuildLogsPayload_LegacyRecordDoesNotInheritCurrentIdentity()
+        {
+            var options = CreateOptions();
+            options.ResourceAttributes = new Dictionary<string, string>
+            {
+                ["app.user_id"] = "current-account",
+            };
+
+            var payload = OtlpJsonWriter.BuildLogsPayload(
+                new List<PendingExport> { CreatePendingExport() },
+                options);
+
+            StringAssert.DoesNotContain("current-account", payload);
+            StringAssert.Contains("unimetry.resource_snapshot.missing", payload);
+        }
+
+        [Test]
         public void JsonEscaper_EscapesControlCharacters()
         {
             var builder = new System.Text.StringBuilder();
@@ -110,6 +155,19 @@ namespace Unimetry.Tests
                 CapturedAtUnixNano = 1_700_000_000_000_000_000L,
                 IncludeSpan = includeSpan,
             };
+        }
+
+        private static int Count(string value, string needle)
+        {
+            var count = 0;
+            var offset = 0;
+            while ((offset = value.IndexOf(needle, offset, System.StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                offset += needle.Length;
+            }
+
+            return count;
         }
     }
 }

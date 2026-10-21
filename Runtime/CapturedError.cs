@@ -39,6 +39,9 @@ namespace Unimetry
 
         /// <summary>Native crash artifact recovered on a later launch.</summary>
         NativeCrash = 4,
+
+        /// <summary>Exception attached to a completed <see cref="UnimetryEvent"/> record.</summary>
+        Event = 5,
     }
 
     /// <summary>

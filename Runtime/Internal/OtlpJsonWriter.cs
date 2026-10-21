@@ -67,9 +67,7 @@ namespace Unimetry.Internal
             UnimetryOptions options)
         {
             var builder = new StringBuilder(2048);
-            builder.Append("{\"resourceLogs\":[{\"resource\":{\"attributes\":");
-            AppendResourceAttributes(builder, options);
-            builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.2.0\"},\"logRecords\":[");
+            builder.Append("{\"resourceLogs\":[");
             var errorCount = items == null ? 0 : items.Count;
             if (eventCount < 0)
             {
@@ -81,34 +79,67 @@ namespace Unimetry.Internal
                 eventCount = events == null ? 0 : events.Length;
             }
 
-            var writtenLogs = 0;
+            var fallback = ResourceSnapshot.ForLegacyRecord(options);
+            var resources = new List<ResourceSnapshot>();
             for (var index = 0; index < errorCount; index++)
             {
-                if (items[index].SkipLog)
+                if (!items[index].SkipLog)
                 {
-                    continue;
+                    AddResource(resources, items[index].Resource ?? fallback);
                 }
-
-                if (writtenLogs > 0)
-                {
-                    builder.Append(',');
-                }
-
-                AppendLogRecord(builder, items[index]);
-                writtenLogs++;
             }
 
             for (var index = 0; index < eventCount; index++)
             {
-                if (writtenLogs > 0 || index > 0)
+                AddResource(resources, events[index].Resource ?? fallback);
+            }
+
+            for (var resourceIndex = 0; resourceIndex < resources.Count; resourceIndex++)
+            {
+                if (resourceIndex > 0)
                 {
                     builder.Append(',');
                 }
 
-                AppendEventRecord(builder, events[index]);
+                var resource = resources[resourceIndex];
+                builder.Append("{\"resource\":{\"attributes\":");
+                AppendResourceAttributes(builder, resource);
+                builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.3.0\"},\"logRecords\":[");
+                var writtenLogs = 0;
+                for (var index = 0; index < errorCount; index++)
+                {
+                    if (items[index].SkipLog || !ResourceSnapshot.Equivalent(items[index].Resource ?? fallback, resource))
+                    {
+                        continue;
+                    }
+
+                    if (writtenLogs++ > 0)
+                    {
+                        builder.Append(',');
+                    }
+
+                    AppendLogRecord(builder, items[index]);
+                }
+
+                for (var index = 0; index < eventCount; index++)
+                {
+                    if (!ResourceSnapshot.Equivalent(events[index].Resource ?? fallback, resource))
+                    {
+                        continue;
+                    }
+
+                    if (writtenLogs++ > 0)
+                    {
+                        builder.Append(',');
+                    }
+
+                    AppendEventRecord(builder, events[index]);
+                }
+
+                builder.Append("]}]}");
             }
 
-            builder.Append("]}]}]}");
+            builder.Append("]}");
             return builder.ToString();
         }
 
@@ -117,45 +148,65 @@ namespace Unimetry.Internal
             UnimetryOptions options)
         {
             var builder = new StringBuilder(2048);
-            builder.Append("{\"resourceSpans\":[{\"resource\":{\"attributes\":");
-            AppendResourceAttributes(builder, options);
-            builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.2.0\"},\"spans\":[");
-            var first = true;
+            builder.Append("{\"resourceSpans\":[");
+            var fallback = ResourceSnapshot.ForLegacyRecord(options);
+            var resources = new List<ResourceSnapshot>();
             for (var index = 0; index < items.Count; index++)
             {
-                if (!items[index].IncludeSpan)
+                if (items[index].IncludeSpan)
                 {
-                    continue;
+                    AddResource(resources, items[index].Resource ?? fallback);
                 }
+            }
 
-                if (!first)
+            for (var resourceIndex = 0; resourceIndex < resources.Count; resourceIndex++)
+            {
+                if (resourceIndex > 0)
                 {
                     builder.Append(',');
                 }
 
-                AppendSpan(builder, items[index]);
-                first = false;
+                var resource = resources[resourceIndex];
+                builder.Append("{\"resource\":{\"attributes\":");
+                AppendResourceAttributes(builder, resource);
+                builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.3.0\"},\"spans\":[");
+                var first = true;
+                for (var index = 0; index < items.Count; index++)
+                {
+                    if (!items[index].IncludeSpan ||
+                        !ResourceSnapshot.Equivalent(items[index].Resource ?? fallback, resource))
+                    {
+                        continue;
+                    }
+
+                    if (!first)
+                    {
+                        builder.Append(',');
+                    }
+
+                    AppendSpan(builder, items[index]);
+                    first = false;
+                }
+
+                builder.Append("]}]}");
             }
 
-            builder.Append("]}]}]}");
+            builder.Append("]}");
             return builder.ToString();
         }
 
-        private static void AppendResourceAttributes(StringBuilder builder, UnimetryOptions options)
+        private static void AppendResourceAttributes(StringBuilder builder, ResourceSnapshot resource)
         {
             var attributes = new AttributeWriter(builder);
-            attributes.WriteString("service.name", options.ServiceName);
-            attributes.WriteString("service.version", options.ServiceVersion);
-            attributes.WriteString("deployment.environment", options.DeploymentEnvironment);
-            attributes.WriteString("telemetry.sdk.name", "unimetry");
-            attributes.WriteString("telemetry.sdk.language", "csharp");
-            attributes.WriteString("telemetry.sdk.version", "0.2.0");
-
-            if (options.ResourceAttributes != null)
+            if (resource?.Attributes != null)
             {
-                foreach (var pair in options.ResourceAttributes)
+                for (var index = 0; index < resource.Attributes.Length; index++)
                 {
-                    attributes.WriteString(pair.Key, pair.Value);
+                    var pair = resource.Attributes[index];
+                    if (pair != null)
+                    {
+                        attributes.WriteString(pair.Key, pair.Value);
+                    }
                 }
             }
 
@@ -359,10 +410,21 @@ namespace Unimetry.Internal
             long usedBytes,
             double startupSeconds)
         {
+            return BuildMetricsPayload(null, options, timeUnixNano, framesPerSecond, usedBytes, startupSeconds);
+        }
+
+        public static string BuildMetricsPayload(
+            ResourceSnapshot resource,
+            UnimetryOptions options,
+            long timeUnixNano,
+            double framesPerSecond,
+            long usedBytes,
+            double startupSeconds)
+        {
             var builder = new StringBuilder(1024);
             builder.Append("{\"resourceMetrics\":[{\"resource\":{\"attributes\":");
-            AppendResourceAttributes(builder, options);
-            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.2.0\"},\"metrics\":[");
+            AppendResourceAttributes(builder, resource ?? ResourceSnapshot.FromOptions(options));
+            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.3.0\"},\"metrics\":[");
             var written = 0;
             if (!double.IsNaN(framesPerSecond) && !double.IsInfinity(framesPerSecond) && framesPerSecond >= 0)
             {
@@ -381,6 +443,19 @@ namespace Unimetry.Internal
 
             builder.Append("]}]}]}");
             return builder.ToString();
+        }
+
+        private static void AddResource(List<ResourceSnapshot> resources, ResourceSnapshot candidate)
+        {
+            for (var index = 0; index < resources.Count; index++)
+            {
+                if (ResourceSnapshot.Equivalent(resources[index], candidate))
+                {
+                    return;
+                }
+            }
+
+            resources.Add(candidate);
         }
 
         private static void AppendGauge(

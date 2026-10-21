@@ -3,6 +3,7 @@ using System.IO;
 using NUnit.Framework;
 using Unimetry.Internal;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Unimetry.Tests
 {
@@ -17,6 +18,12 @@ namespace Unimetry.Tests
             if (File.Exists(queuePath))
             {
                 File.Delete(queuePath);
+            }
+
+            var eventPath = Path.Combine(root, "events.json");
+            if (File.Exists(eventPath))
+            {
+                File.Delete(eventPath);
             }
 
             var breadcrumbs = Path.Combine(root, "breadcrumbs.txt");
@@ -137,6 +144,46 @@ namespace Unimetry.Tests
             StringAssert.Contains("BreadcrumbCapacity", exception.Message);
         }
 
+        [Test]
+        public void ErrorFilter_CanDisableUnityLogCaptureOnly()
+        {
+            var options = CreateOptions(captureNativeCrashes: false);
+            options.ErrorFilter = captured => captured.Source != CapturedErrorSource.UnityLog;
+            UnimetryClient.Initialize(options);
+
+            LogAssert.Expect(LogType.Error, "filtered unity error");
+            Debug.LogError("filtered unity error");
+            UnimetryClient.Report(new InvalidOperationException("manual remains"));
+
+            var batch = new PersistentQueue(32).DequeueBatch(32);
+            Assert.AreEqual(1, batch.Count);
+            Assert.AreEqual(CapturedErrorSource.Manual.ToString(), batch[0].Source);
+        }
+
+        [Test]
+        public void SetResourceAttribute_SnapshotsIdentityAtRecordTime()
+        {
+            var options = CreateOptions(captureNativeCrashes: false);
+            options.ResourceAttributes = new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["app.user_id"] = "account-a",
+            };
+            UnimetryClient.Initialize(options);
+            UnimetryClient.Report(new InvalidOperationException("from account a"));
+
+            UnimetryClient.SetResourceAttribute("app.user_id", "account-b");
+            UnimetryClient.Report(new ArgumentException("from account b"));
+            var span = UnimetryTrace.Start("account-b-span");
+            UnimetryClient.SetResourceAttribute("app.user_id", "account-c");
+            span.Dispose();
+
+            var batch = new PersistentQueue(32).DequeueBatch(32);
+            Assert.AreEqual(3, batch.Count);
+            Assert.AreEqual("account-a", FindResource(batch[0], "app.user_id"));
+            Assert.AreEqual("account-b", FindResource(batch[1], "app.user_id"));
+            Assert.AreEqual("account-b", FindResource(batch[2], "app.user_id"));
+        }
+
         private static UnimetryOptions CreateOptions(bool captureNativeCrashes)
         {
             return new UnimetryOptions
@@ -152,6 +199,25 @@ namespace Unimetry.Tests
         private static string CrashDirectory()
         {
             return Path.Combine(Application.persistentDataPath, "unimetry", "crashes");
+        }
+
+        private static string FindResource(PendingExport export, string key)
+        {
+            var attributes = export.Resource?.Attributes;
+            if (attributes == null)
+            {
+                return null;
+            }
+
+            for (var index = 0; index < attributes.Length; index++)
+            {
+                if (attributes[index].Key == key)
+                {
+                    return attributes[index].Value;
+                }
+            }
+
+            return null;
         }
     }
 }

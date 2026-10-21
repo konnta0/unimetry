@@ -32,6 +32,7 @@ namespace Unimetry.Internal
         public int SpanStatusCode;
         public long StartUnixNano;
         public bool SkipLog;
+        public ResourceSnapshot Resource;
 
         public static PendingExport FromCapturedError(CapturedError capturedError, bool includeSpan)
         {

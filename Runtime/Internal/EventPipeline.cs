@@ -66,6 +66,11 @@ namespace Unimetry.Internal
             LogDispatch.Emit(writer, in entry);
         }
 
+        public static ResourceSnapshot CaptureResource()
+        {
+            return buffer?.CaptureResource();
+        }
+
         public static int CopyPending(EventRecord[] destination)
         {
             var activeBuffer = buffer;
