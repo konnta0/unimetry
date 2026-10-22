@@ -96,6 +96,19 @@ options.WithLog(static (in UnimetryLogEntry entry) =>
 });
 ```
 
+### UniTask 連携（任意）
+
+UniTask 2.x が UPM で導入されている場合、Unimetry は `com.cysharp.unitask` を検出し、定期 flush から OTLP リクエストまでの内部処理をネイティブ `UniTask` へ自動的に切り替えます。互換性のため既存の `Task` APIも残ります。最後の `Task` 互換変換による割り当ても避ける場合は、UniTask専用APIを呼びます。
+
+```csharp
+using Cysharp.Threading.Tasks;
+
+await UnimetryClient.FlushUniTaskAsync(cancellationToken);
+await UnimetryClient.ShutdownUniTaskAsync(cancellationToken);
+```
+
+UPMではなくアセットとしてUniTaskを導入したプロジェクトでは、`UNIMETRY_UNITASK` scripting defineを設定すると同じ経路を有効にできます。UniTaskが存在しないプロジェクトでは、従来どおり`Task`でコンパイル・動作します。
+
 ## Event
 
 Event は OTLP Log の `eventName` 付きレコードです。`timeUnixNano` が開始、`observedTimeUnixNano` が終了、`unimetry.event.duration_ns` が経過時間です。未初期化、または `CaptureEvents = false` のとき、同期の `Begin` はアロケーションしません。

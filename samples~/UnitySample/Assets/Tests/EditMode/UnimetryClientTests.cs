@@ -1,5 +1,10 @@
 using System;
 using System.IO;
+#if UNIMETRY_UNITASK
+using System.Reflection;
+using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
+#endif
 using NUnit.Framework;
 using Unimetry.Internal;
 using UnityEngine;
@@ -73,6 +78,33 @@ namespace Unimetry.Tests
         {
             Assert.DoesNotThrow(() => UnimetryClient.AddBreadcrumb("early"));
         }
+
+#if UNIMETRY_UNITASK
+        [Test]
+        public void AsyncApis_ExposeTaskAndUniTaskVariants()
+        {
+            Assert.AreEqual(
+                typeof(Task),
+                typeof(UnimetryClient).GetMethod(
+                    nameof(UnimetryClient.FlushAsync),
+                    BindingFlags.Public | BindingFlags.Static)?.ReturnType);
+            Assert.AreEqual(
+                typeof(UniTask),
+                typeof(UnimetryClient).GetMethod(
+                    nameof(UnimetryClient.FlushUniTaskAsync),
+                    BindingFlags.Public | BindingFlags.Static)?.ReturnType);
+            Assert.AreEqual(
+                typeof(Task),
+                typeof(UnimetryClient).GetMethod(
+                    nameof(UnimetryClient.ShutdownAsync),
+                    BindingFlags.Public | BindingFlags.Static)?.ReturnType);
+            Assert.AreEqual(
+                typeof(UniTask),
+                typeof(UnimetryClient).GetMethod(
+                    nameof(UnimetryClient.ShutdownUniTaskAsync),
+                    BindingFlags.Public | BindingFlags.Static)?.ReturnType);
+        }
+#endif
 
         [Test]
         public void Initialize_WhenNativeCrashesDisabled_DeletesStoredArtifacts()

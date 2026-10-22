@@ -1,6 +1,12 @@
 using System;
 using System.Threading;
+#if UNIMETRY_UNITASK
+using AsyncTask = Cysharp.Threading.Tasks.UniTask;
+using Cysharp.Threading.Tasks;
+#else
 using System.Threading.Tasks;
+using AsyncTask = System.Threading.Tasks.Task;
+#endif
 using UnityEngine;
 
 namespace Unimetry.Internal
@@ -76,10 +82,14 @@ namespace Unimetry.Internal
             }
 
             nextFlushTime = Time.realtimeSinceStartup + (float)options.FlushInterval.TotalSeconds;
+#if UNIMETRY_UNITASK
+            FlushAsync(cancellationTokenSource.Token).Forget();
+#else
             _ = FlushAsync(cancellationTokenSource.Token);
+#endif
         }
 
-        public async Task FlushAsync(CancellationToken cancellationToken)
+        public async AsyncTask FlushAsync(CancellationToken cancellationToken)
         {
             if (Interlocked.CompareExchange(ref flushInProgress, 1, 0) != 0)
             {
@@ -89,7 +99,7 @@ namespace Unimetry.Internal
             try
             {
                 beforeFlush?.Invoke();
-                await ExportMetricsAsync(cancellationToken).ConfigureAwait(true);
+                await ExportMetricsAsync(cancellationToken);
                 while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -104,7 +114,7 @@ namespace Unimetry.Internal
                     bool exported;
                     try
                     {
-                        exported = await exporter.ExportAsync(batch, eventBatch, eventCount, cancellationToken).ConfigureAwait(true);
+                        exported = await exporter.ExportAsync(batch, eventBatch, eventCount, cancellationToken);
                     }
                     catch
                     {
@@ -175,7 +185,7 @@ namespace Unimetry.Internal
             fpsCount++;
         }
 
-        private async Task ExportMetricsAsync(CancellationToken cancellationToken)
+        private async AsyncTask ExportMetricsAsync(CancellationToken cancellationToken)
         {
             if (!options.CaptureMetrics)
             {
@@ -197,7 +207,7 @@ namespace Unimetry.Internal
                 frames,
                 GC.GetTotalMemory(false),
                 startupSeconds);
-            var sent = await exporter.ExportMetricsAsync(payload, cancellationToken).ConfigureAwait(true);
+            var sent = await exporter.ExportMetricsAsync(payload, cancellationToken);
             if (!sent)
             {
                 Debug.LogWarning("Unimetry metrics export failed.");
@@ -206,7 +216,11 @@ namespace Unimetry.Internal
 
         private void HandleApplicationQuitting()
         {
+#if UNIMETRY_UNITASK
+            FlushAsync(CancellationToken.None).Forget();
+#else
             _ = FlushAsync(CancellationToken.None);
+#endif
         }
 
         private void EnsureDispatcher()

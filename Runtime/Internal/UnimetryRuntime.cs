@@ -1,7 +1,12 @@
 using System;
 using System.IO;
 using System.Threading;
+#if UNIMETRY_UNITASK
+using AsyncTask = Cysharp.Threading.Tasks.UniTask;
+#else
 using System.Threading.Tasks;
+using AsyncTask = System.Threading.Tasks.Task;
+#endif
 using UnityEngine;
 
 namespace Unimetry.Internal
@@ -105,7 +110,7 @@ namespace Unimetry.Internal
             }
         }
 
-        public Task FlushAsync(CancellationToken cancellationToken)
+        public AsyncTask FlushAsync(CancellationToken cancellationToken)
         {
             return flusher.FlushAsync(cancellationToken);
         }

@@ -2,7 +2,8 @@
   "name": "Unimetry.Tests.Editor",
   "rootNamespace": "Unimetry.Tests",
   "references": [
-    "Unimetry.Runtime"
+    "Unimetry.Runtime",
+    "UniTask"
   ],
   "includePlatforms": [
     "Editor"
@@ -13,7 +14,13 @@
   "precompiledReferences": [],
   "autoReferenced": false,
   "defineConstraints": [],
-  "versionDefines": [],
+  "versionDefines": [
+    {
+      "name": "com.cysharp.unitask",
+      "expression": "2.0.0",
+      "define": "UNIMETRY_UNITASK"
+    }
+  ],
   "optionalUnityReferences": [
     "TestAssemblies"
   ],

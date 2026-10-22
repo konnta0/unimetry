@@ -1,7 +1,9 @@
 {
   "name": "Unimetry.Runtime",
   "rootNamespace": "Unimetry",
-  "references": [],
+  "references": [
+    "UniTask"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
@@ -9,6 +11,12 @@
   "precompiledReferences": [],
   "autoReferenced": true,
   "defineConstraints": [],
-  "versionDefines": [],
+  "versionDefines": [
+    {
+      "name": "com.cysharp.unitask",
+      "expression": "2.0.0",
+      "define": "UNIMETRY_UNITASK"
+    }
+  ],
   "noEngineReferences": false
 }

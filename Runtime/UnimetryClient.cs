@@ -1,6 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+#if UNIMETRY_UNITASK
+using Cysharp.Threading.Tasks;
+#endif
 using Unimetry.Internal;
 
 namespace Unimetry
@@ -85,8 +88,25 @@ namespace Unimetry
         /// <returns>A task that completes when the flush attempt finishes.</returns>
         public static Task FlushAsync(CancellationToken cancellationToken = default)
         {
+#if UNIMETRY_UNITASK
+            return GetRuntimeOrThrow().FlushAsync(cancellationToken).AsTask();
+#else
+            return GetRuntimeOrThrow().FlushAsync(cancellationToken);
+#endif
+        }
+
+#if UNIMETRY_UNITASK
+        /// <summary>
+        /// Flushes queued telemetry using UniTask without allocating a compatibility <see cref="Task"/>.
+        /// This API is available when UniTask 2.x is installed in the Unity project.
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>A UniTask that completes when the flush attempt finishes.</returns>
+        public static UniTask FlushUniTaskAsync(CancellationToken cancellationToken = default)
+        {
             return GetRuntimeOrThrow().FlushAsync(cancellationToken);
         }
+#endif
 
         /// <summary>
         /// Sets or replaces a resource attribute for telemetry recorded after this call.
@@ -101,7 +121,30 @@ namespace Unimetry
         /// <summary>
         /// Flushes queued telemetry, then stops capture hooks and releases runtime resources.
         /// </summary>
-        public static async Task ShutdownAsync(CancellationToken cancellationToken = default)
+        public static Task ShutdownAsync(CancellationToken cancellationToken = default)
+        {
+#if UNIMETRY_UNITASK
+            return ShutdownCoreAsync(cancellationToken).AsTask();
+#else
+            return ShutdownCoreAsync(cancellationToken);
+#endif
+        }
+
+#if UNIMETRY_UNITASK
+        /// <summary>
+        /// Flushes queued telemetry and shuts down using UniTask without allocating a compatibility <see cref="Task"/>.
+        /// This API is available when UniTask 2.x is installed in the Unity project.
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        public static UniTask ShutdownUniTaskAsync(CancellationToken cancellationToken = default)
+        {
+            return ShutdownCoreAsync(cancellationToken);
+        }
+
+        private static async UniTask ShutdownCoreAsync(CancellationToken cancellationToken)
+#else
+        private static async Task ShutdownCoreAsync(CancellationToken cancellationToken)
+#endif
         {
             UnimetryRuntime current;
             lock (Gate)
@@ -126,7 +169,7 @@ namespace Unimetry
 
             try
             {
-                await current.FlushAsync(cancellationToken).ConfigureAwait(true);
+                await current.FlushAsync(cancellationToken);
             }
             finally
             {

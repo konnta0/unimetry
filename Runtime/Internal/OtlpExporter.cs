@@ -2,7 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
+#if UNIMETRY_UNITASK
+using BoolTask = Cysharp.Threading.Tasks.UniTask<bool>;
+using Cysharp.Threading.Tasks;
+#else
 using System.Threading.Tasks;
+using BoolTask = System.Threading.Tasks.Task<bool>;
+#endif
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -24,22 +30,26 @@ namespace Unimetry.Internal
             metricsEndpoint = endpoint + "/v1/metrics";
         }
 
-        public Task<bool> ExportMetricsAsync(string payload, CancellationToken cancellationToken)
+        public BoolTask ExportMetricsAsync(string payload, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(payload))
             {
+#if UNIMETRY_UNITASK
+                return UniTask.FromResult(true);
+#else
                 return Task.FromResult(true);
+#endif
             }
 
             return SendAsync(metricsEndpoint, payload, cancellationToken);
         }
 
-        public Task<bool> ExportAsync(IReadOnlyList<PendingExport> items, CancellationToken cancellationToken)
+        public BoolTask ExportAsync(IReadOnlyList<PendingExport> items, CancellationToken cancellationToken)
         {
             return ExportAsync(items, null, 0, cancellationToken);
         }
 
-        public async Task<bool> ExportAsync(
+        public async BoolTask ExportAsync(
             IReadOnlyList<PendingExport> items,
             EventRecord[] events,
             int eventCount,
@@ -95,7 +105,7 @@ namespace Unimetry.Internal
             return await SendAsync(tracesEndpoint, tracesPayload, cancellationToken);
         }
 
-        private async Task<bool> SendAsync(string url, string payload, CancellationToken cancellationToken)
+        private async BoolTask SendAsync(string url, string payload, CancellationToken cancellationToken)
         {
             using var request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST);
             var body = Encoding.UTF8.GetBytes(payload);
@@ -128,7 +138,11 @@ namespace Unimetry.Internal
                     cancellationToken.ThrowIfCancellationRequested();
                 }
 
+#if UNIMETRY_UNITASK
+                await UniTask.Yield();
+#else
                 await Task.Yield();
+#endif
             }
 
 #if UNITY_2020_2_OR_NEWER

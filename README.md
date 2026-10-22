@@ -96,6 +96,19 @@ options.WithLog(static (in UnimetryLogEntry entry) =>
 });
 ```
 
+### Optional UniTask integration
+
+When UniTask 2.x is installed through UPM, Unimetry detects `com.cysharp.unitask` and automatically uses native `UniTask` throughout its periodic flush and OTLP request pipeline. Existing `Task` APIs remain available for compatibility. Call the UniTask-specific APIs to avoid the final `Task` compatibility allocation:
+
+```csharp
+using Cysharp.Threading.Tasks;
+
+await UnimetryClient.FlushUniTaskAsync(cancellationToken);
+await UnimetryClient.ShutdownUniTaskAsync(cancellationToken);
+```
+
+Projects that imported UniTask as an asset rather than a UPM package can enable the same path with the `UNIMETRY_UNITASK` scripting define. Without UniTask, Unimetry compiles and behaves as before using `Task`.
+
 ## Event
 
 An event is an OTLP log record with `eventName`. `timeUnixNano` is the start, `observedTimeUnixNano` is the end, and `unimetry.event.duration_ns` is the elapsed time. When the client is not initialized, or when `CaptureEvents = false`, synchronous `Begin` does not allocate.
