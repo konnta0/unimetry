@@ -66,7 +66,7 @@ namespace Unimetry.Internal
             if (logCount > 0 || eventCount > 0)
             {
                 var logsPayload = OtlpJsonWriter.BuildLogsPayload(items, events, eventCount, options);
-                var logsSent = await SendAsync(logsEndpoint, logsPayload, cancellationToken).ConfigureAwait(false);
+                var logsSent = await SendAsync(logsEndpoint, logsPayload, cancellationToken);
                 if (!logsSent)
                 {
                     return false;
@@ -92,7 +92,7 @@ namespace Unimetry.Internal
             }
 
             var tracesPayload = OtlpJsonWriter.BuildTracesPayload(items, options);
-            return await SendAsync(tracesEndpoint, tracesPayload, cancellationToken).ConfigureAwait(false);
+            return await SendAsync(tracesEndpoint, tracesPayload, cancellationToken);
         }
 
         private async Task<bool> SendAsync(string url, string payload, CancellationToken cancellationToken)
