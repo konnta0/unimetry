@@ -98,7 +98,7 @@ namespace Unimetry.Internal
                 ["deployment.environment"] = options.DeploymentEnvironment ?? string.Empty,
                 ["telemetry.sdk.name"] = "unimetry",
                 ["telemetry.sdk.language"] = "csharp",
-                ["telemetry.sdk.version"] = "0.4.0",
+                ["telemetry.sdk.version"] = "0.4.1",
             };
         }
     }

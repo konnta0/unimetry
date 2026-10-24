@@ -16,6 +16,10 @@ namespace Unimetry
         private static readonly object Gate = new();
         private static UnimetryRuntime runtime;
         private static bool shuttingDown;
+#if !UNIMETRY_UNITASK
+        private static SynchronizationContext mainThreadContext;
+        private static TaskScheduler mainThreadScheduler;
+#endif
 
         /// <summary>
         /// Gets whether Unimetry has been initialized.
@@ -54,6 +58,9 @@ namespace Unimetry
 
                 created = new UnimetryRuntime(options);
                 created.Start();
+#if !UNIMETRY_UNITASK
+                CaptureMainThreadContext();
+#endif
                 Volatile.Write(ref runtime, created);
             }
 
@@ -88,10 +95,11 @@ namespace Unimetry
         /// <returns>A task that completes when the flush attempt finishes.</returns>
         public static Task FlushAsync(CancellationToken cancellationToken = default)
         {
+            var current = GetRuntimeOrThrow();
 #if UNIMETRY_UNITASK
-            return GetRuntimeOrThrow().FlushAsync(cancellationToken).AsTask();
+            return FlushOnMainThreadAsync(current, cancellationToken).AsTask();
 #else
-            return GetRuntimeOrThrow().FlushAsync(cancellationToken);
+            return RunOnMainThread(() => current.FlushAsync(cancellationToken));
 #endif
         }
 
@@ -104,7 +112,16 @@ namespace Unimetry
         /// <returns>A UniTask that completes when the flush attempt finishes.</returns>
         public static UniTask FlushUniTaskAsync(CancellationToken cancellationToken = default)
         {
-            return GetRuntimeOrThrow().FlushAsync(cancellationToken);
+            return FlushOnMainThreadAsync(GetRuntimeOrThrow(), cancellationToken);
+        }
+
+        private static async UniTask FlushOnMainThreadAsync(
+            UnimetryRuntime current,
+            CancellationToken cancellationToken)
+        {
+            // OtlpExporter creates UnityWebRequest objects, which only work on the main thread.
+            await UniTask.SwitchToMainThread(cancellationToken);
+            await current.FlushAsync(cancellationToken);
         }
 #endif
 
@@ -126,7 +143,7 @@ namespace Unimetry
 #if UNIMETRY_UNITASK
             return ShutdownCoreAsync(cancellationToken).AsTask();
 #else
-            return ShutdownCoreAsync(cancellationToken);
+            return RunOnMainThread(() => ShutdownCoreAsync(cancellationToken));
 #endif
         }
 
@@ -146,6 +163,11 @@ namespace Unimetry
         private static async Task ShutdownCoreAsync(CancellationToken cancellationToken)
 #endif
         {
+#if UNIMETRY_UNITASK
+            // The final flush creates UnityWebRequest objects and Dispose destroys the dispatcher,
+            // so both operations need the main thread.
+            await UniTask.SwitchToMainThread(cancellationToken);
+#endif
             UnimetryRuntime current;
             lock (Gate)
             {
@@ -231,5 +253,33 @@ namespace Unimetry
                 return runtime;
             }
         }
+
+#if !UNIMETRY_UNITASK
+        private static void CaptureMainThreadContext()
+        {
+            // Initialize runs on the main thread because it creates the dispatcher MonoBehaviour.
+            mainThreadContext = SynchronizationContext.Current;
+            mainThreadScheduler = mainThreadContext == null
+                ? null
+                : TaskScheduler.FromCurrentSynchronizationContext();
+        }
+
+        private static Task RunOnMainThread(Func<Task> operation)
+        {
+            // OtlpExporter creates UnityWebRequest objects, which only work on the main thread.
+            var scheduler = mainThreadScheduler;
+            if (scheduler == null || SynchronizationContext.Current == mainThreadContext)
+            {
+                return operation();
+            }
+
+            return Task.Factory.StartNew(
+                    operation,
+                    CancellationToken.None,
+                    TaskCreationOptions.None,
+                    scheduler)
+                .Unwrap();
+        }
+#endif
     }
 }

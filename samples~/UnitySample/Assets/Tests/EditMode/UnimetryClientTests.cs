@@ -1,8 +1,9 @@
 using System;
+using System.Collections;
 using System.IO;
+using System.Threading.Tasks;
 #if UNIMETRY_UNITASK
 using System.Reflection;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 #endif
 using NUnit.Framework;
@@ -105,6 +106,31 @@ namespace Unimetry.Tests
                     BindingFlags.Public | BindingFlags.Static)?.ReturnType);
         }
 #endif
+
+        [UnityTest]
+        [Timeout(10000)]
+        public IEnumerator TaskAsyncApis_CanBeCalledFromAWorkerThread()
+        {
+            UnimetryClient.Initialize(CreateOptions(captureNativeCrashes: false));
+            UnimetryClient.Report(new InvalidOperationException("worker-thread flush"));
+
+            var flush = Task.Run(() => UnimetryClient.FlushAsync());
+            while (!flush.IsCompleted)
+            {
+                yield return null;
+            }
+
+            Assert.IsFalse(flush.IsFaulted, flush.Exception?.ToString());
+
+            var shutdown = Task.Run(() => UnimetryClient.ShutdownAsync());
+            while (!shutdown.IsCompleted)
+            {
+                yield return null;
+            }
+
+            Assert.IsFalse(shutdown.IsFaulted, shutdown.Exception?.ToString());
+            Assert.IsFalse(UnimetryClient.IsInitialized);
+        }
 
         [Test]
         public void Initialize_WhenNativeCrashesDisabled_DeletesStoredArtifacts()

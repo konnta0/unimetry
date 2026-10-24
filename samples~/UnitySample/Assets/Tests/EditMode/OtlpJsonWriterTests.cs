@@ -74,6 +74,22 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void BuildTracesPayload_UsesCaptureTimeWhenSpanStartIsMissing()
+        {
+            var options = CreateOptions();
+            var item = CreatePendingExport(includeSpan: true);
+            item.StartUnixNano = 0;
+
+            var payload = OtlpJsonWriter.BuildTracesPayload(
+                new List<PendingExport> { item },
+                options);
+
+            var timestamp = item.CapturedAtUnixNano.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            StringAssert.Contains("\"startTimeUnixNano\":\"" + timestamp + "\"", payload);
+            StringAssert.Contains("\"endTimeUnixNano\":\"" + timestamp + "\"", payload);
+        }
+
+        [Test]
         public void BuildLogsPayload_GroupsRecordsByCapturedResource()
         {
             var options = CreateOptions();

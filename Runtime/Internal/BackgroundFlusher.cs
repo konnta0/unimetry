@@ -116,9 +116,14 @@ namespace Unimetry.Internal
                     {
                         exported = await exporter.ExportAsync(batch, eventBatch, eventCount, cancellationToken);
                     }
-                    catch
+                    catch (Exception exception)
                     {
                         queue.RequeueFront(batch);
+                        if (!(exception is OperationCanceledException))
+                        {
+                            Debug.LogWarning("Unimetry OTLP export failed: " + exception.Message);
+                        }
+
                         throw;
                     }
 

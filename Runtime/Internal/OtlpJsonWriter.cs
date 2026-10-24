@@ -104,7 +104,7 @@ namespace Unimetry.Internal
                 var resource = resources[resourceIndex];
                 builder.Append("{\"resource\":{\"attributes\":");
                 AppendResourceAttributes(builder, resource);
-                builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.4.0\"},\"logRecords\":[");
+                builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.4.1\"},\"logRecords\":[");
                 var writtenLogs = 0;
                 for (var index = 0; index < errorCount; index++)
                 {
@@ -169,7 +169,7 @@ namespace Unimetry.Internal
                 var resource = resources[resourceIndex];
                 builder.Append("{\"resource\":{\"attributes\":");
                 AppendResourceAttributes(builder, resource);
-                builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.4.0\"},\"spans\":[");
+                builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.4.1\"},\"spans\":[");
                 var first = true;
                 for (var index = 0; index < items.Count; index++)
                 {
@@ -243,7 +243,7 @@ namespace Unimetry.Internal
             var endTime = item.CapturedAtUnixNano;
             var startTime = item.StartUnixNano > 0 && item.StartUnixNano <= endTime
                 ? item.StartUnixNano
-                : Math.Max(0, endTime - 1_000_000L);
+                : endTime;
             var statusCode = item.SpanStatusCode == 1 || item.SpanStatusCode == 2 ? item.SpanStatusCode : 2;
 
             builder.Append('{');
@@ -424,7 +424,7 @@ namespace Unimetry.Internal
             var builder = new StringBuilder(1024);
             builder.Append("{\"resourceMetrics\":[{\"resource\":{\"attributes\":");
             AppendResourceAttributes(builder, resource ?? ResourceSnapshot.FromOptions(options));
-            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.4.0\"},\"metrics\":[");
+            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.4.1\"},\"metrics\":[");
             var written = 0;
             if (!double.IsNaN(framesPerSecond) && !double.IsInfinity(framesPerSecond) && framesPerSecond >= 0)
             {
