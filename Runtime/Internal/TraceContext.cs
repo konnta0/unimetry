@@ -141,7 +141,7 @@ namespace Unimetry.Internal
                 Remote = false,
                 Previous = Slot.Value,
             };
-            var startNano = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_000_000L;
+            var startNano = EventClock.UnixNano();
             return new UnimetrySpan(
                 name,
                 traceId,
@@ -164,7 +164,7 @@ namespace Unimetry.Internal
                 Slot.Value = current.Previous;
             }
 
-            var endNano = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_000_000L;
+            var endNano = EventClock.UnixNano();
             if (endNano < span.StartUnixNano)
             {
                 endNano = span.StartUnixNano;

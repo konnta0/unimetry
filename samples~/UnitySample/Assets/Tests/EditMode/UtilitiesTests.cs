@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unimetry.Internal;
 
@@ -30,6 +31,30 @@ namespace Unimetry.Tests
 
             Assert.AreEqual(32, traceId.Length);
             Assert.AreEqual(16, spanId.Length);
+        }
+
+        [Test]
+        public void EventClockUnixNano_ReturnsStrictlyIncreasingValuesWithinTheSameMillisecond()
+        {
+            const int calls = 10_000;
+            var first = EventClock.UnixNano();
+            var previous = first;
+            var foundSameMillisecond = false;
+
+            for (var index = 1; index < calls; index++)
+            {
+                var current = EventClock.UnixNano();
+                Assert.Greater(current, previous);
+                if (current / 1_000_000L == previous / 1_000_000L)
+                {
+                    foundSameMillisecond = true;
+                }
+
+                previous = current;
+            }
+
+            Assert.IsTrue(foundSameMillisecond);
+            Assert.Less(previous - first, TimeSpan.FromSeconds(1).Ticks * 100L);
         }
 
         [Test]
