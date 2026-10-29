@@ -17,6 +17,7 @@ namespace Unimetry.Internal
         private readonly OtlpExporter exporter;
         private readonly UnimetryOptions options;
         private readonly EventBuffer eventBuffer;
+        private readonly MetricBuffer metricBuffer;
         private readonly ResourceState resourceState;
         private readonly Action beforeFlush;
         private readonly EventRecord[] eventBatch;
@@ -36,6 +37,7 @@ namespace Unimetry.Internal
             OtlpExporter exporter,
             UnimetryOptions options,
             EventBuffer eventBuffer,
+            MetricBuffer metricBuffer,
             ResourceState resourceState,
             Action beforeFlush)
         {
@@ -43,6 +45,7 @@ namespace Unimetry.Internal
             this.exporter = exporter;
             this.options = options;
             this.eventBuffer = eventBuffer;
+            this.metricBuffer = metricBuffer;
             this.resourceState = resourceState;
             this.beforeFlush = beforeFlush;
             eventBatch = new EventRecord[options.MaxBatchSize];
@@ -216,17 +219,29 @@ namespace Unimetry.Internal
                 fpsCount = 0;
             }
 
-            var payload = OtlpJsonWriter.BuildMetricsPayload(
-                resourceState?.Capture(),
-                options,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_000_000L,
-                frames,
-                GC.GetTotalMemory(false),
-                startupSeconds);
-            var sent = await exporter.ExportMetricsAsync(payload, cancellationToken);
-            if (!sent)
+            var timeUnixNano = EventClock.UnixNano();
+            var metricBatch = metricBuffer?.Collect(timeUnixNano);
+            try
             {
-                Debug.LogWarning("Unimetry metrics export failed.");
+                var payload = OtlpJsonWriter.BuildMetricsPayload(
+                    resourceState?.Capture(),
+                    options,
+                    timeUnixNano,
+                    frames,
+                    GC.GetTotalMemory(false),
+                    startupSeconds,
+                    metricBatch);
+                var sent = await exporter.ExportMetricsAsync(payload, cancellationToken);
+                if (!sent)
+                {
+                    metricBuffer?.Requeue(metricBatch);
+                    Debug.LogWarning("Unimetry metrics export failed.");
+                }
+            }
+            catch
+            {
+                metricBuffer?.Requeue(metricBatch);
+                throw;
             }
         }
 

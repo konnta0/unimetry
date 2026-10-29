@@ -419,7 +419,8 @@ namespace Unimetry.Internal
             long timeUnixNano,
             double framesPerSecond,
             long usedBytes,
-            double startupSeconds)
+            double startupSeconds,
+            MetricBatch metricBatch = null)
         {
             var builder = new StringBuilder(1024);
             builder.Append("{\"resourceMetrics\":[{\"resource\":{\"attributes\":");
@@ -439,6 +440,32 @@ namespace Unimetry.Internal
             if (!double.IsNaN(startupSeconds) && startupSeconds >= 0)
             {
                 AppendGauge(builder, "unity.startup.duration_s", startupSeconds, timeUnixNano, ref written);
+            }
+
+            if (metricBatch?.Metrics != null)
+            {
+                for (var index = 0; index < metricBatch.Metrics.Count; index++)
+                {
+                    var metric = metricBatch.Metrics[index];
+                    if (metric.Kind == MetricKind.Counter)
+                    {
+                        AppendCounter(
+                            builder,
+                            metric,
+                            metricBatch.StartTimeUnixNano,
+                            metricBatch.TimeUnixNano,
+                            ref written);
+                    }
+                    else
+                    {
+                        AppendHistogram(
+                            builder,
+                            metric,
+                            metricBatch.StartTimeUnixNano,
+                            metricBatch.TimeUnixNano,
+                            ref written);
+                    }
+                }
             }
 
             builder.Append("]}]}]}");
@@ -478,6 +505,102 @@ namespace Unimetry.Internal
             builder.Append("\",\"asDouble\":");
             builder.Append(value.ToString("R", CultureInfo.InvariantCulture));
             builder.Append("}]}}");
+        }
+
+        private static void AppendCounter(
+            StringBuilder builder,
+            MetricSnapshot metric,
+            long startTimeUnixNano,
+            long timeUnixNano,
+            ref int written)
+        {
+            AppendMetricPrefix(builder, metric, ref written);
+            builder.Append("\"sum\":{\"aggregationTemporality\":1,\"isMonotonic\":true,\"dataPoints\":[{");
+            AppendMetricTimes(builder, startTimeUnixNano, timeUnixNano);
+            builder.Append(",\"asDouble\":");
+            builder.Append(metric.Sum.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append("}]}}");
+        }
+
+        private static void AppendHistogram(
+            StringBuilder builder,
+            MetricSnapshot metric,
+            long startTimeUnixNano,
+            long timeUnixNano,
+            ref int written)
+        {
+            AppendMetricPrefix(builder, metric, ref written);
+            builder.Append("\"histogram\":{\"aggregationTemporality\":1,\"dataPoints\":[{");
+            AppendMetricTimes(builder, startTimeUnixNano, timeUnixNano);
+            builder.Append(",\"count\":\"");
+            builder.Append(metric.Count.ToString(CultureInfo.InvariantCulture));
+            builder.Append("\",\"sum\":");
+            builder.Append(metric.Sum.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(",\"bucketCounts\":[");
+            for (var index = 0; index < metric.BucketCounts.Length; index++)
+            {
+                if (index > 0)
+                {
+                    builder.Append(',');
+                }
+
+                builder.Append('\"');
+                builder.Append(metric.BucketCounts[index].ToString(CultureInfo.InvariantCulture));
+                builder.Append('\"');
+            }
+
+            builder.Append("],\"explicitBounds\":[");
+            for (var index = 0; index < metric.ExplicitBounds.Length; index++)
+            {
+                if (index > 0)
+                {
+                    builder.Append(',');
+                }
+
+                builder.Append(metric.ExplicitBounds[index].ToString("R", CultureInfo.InvariantCulture));
+            }
+
+            builder.Append("],\"min\":");
+            builder.Append(metric.Min.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(",\"max\":");
+            builder.Append(metric.Max.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append("}]}}");
+        }
+
+        private static void AppendMetricPrefix(
+            StringBuilder builder,
+            MetricSnapshot metric,
+            ref int written)
+        {
+            if (written > 0)
+            {
+                builder.Append(',');
+            }
+
+            written++;
+            builder.Append("{\"name\":\"");
+            JsonEscaper.AppendEscaped(builder, metric.Name);
+            builder.Append('\"');
+            if (!string.IsNullOrEmpty(metric.Unit))
+            {
+                builder.Append(",\"unit\":\"");
+                JsonEscaper.AppendEscaped(builder, metric.Unit);
+                builder.Append('\"');
+            }
+
+            builder.Append(',');
+        }
+
+        private static void AppendMetricTimes(
+            StringBuilder builder,
+            long startTimeUnixNano,
+            long timeUnixNano)
+        {
+            builder.Append("\"startTimeUnixNano\":\"");
+            builder.Append(startTimeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append("\",\"timeUnixNano\":\"");
+            builder.Append(timeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append('\"');
         }
 
         private static void AppendBaggage(AttributeWriter attributes, string baggage)

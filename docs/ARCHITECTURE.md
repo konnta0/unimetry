@@ -51,7 +51,7 @@ Native crashes do not go through this loop. A Windows unhandled-exception filter
 | --- | --- |
 | **Logs** | Exception body, stacktrace search, events, and integration with log backends (Loki and others) |
 | **Traces** | Error spans and gameplay spans. An error uses the current trace when `Activity.Current`, `UnimetryTrace`, or a W3C `traceparent` has one |
-| **Metrics** | Gauges for FPS, managed memory, and startup duration |
+| **Metrics** | Gauges for FPS, managed memory, and startup duration; delta counters and histograms recorded through `UnimetryMetric` |
 
 Each error still gets its own `trace_id` when no ambient trace is present. Baggage (`user.id`, `session.id`, and other keys set with `SetBaggage`) is copied onto span attributes. It is not added to the resource.
 
@@ -87,5 +87,5 @@ exporters:
 - `CaptureNativeCrashes` / `AddBreadcrumb` — native crashes on Windows, macOS, iOS, and Android players, uploaded on the next launch as `unimetry.record_type=crash`
 - `UnimetryTrace` — gameplay spans, W3C `traceparent`, and baggage
 - `Runtime/link.xml` — keeps `Activity` for IL2CPP when `System.Diagnostics.DiagnosticSource` is present
-- `CaptureMetrics` — FPS, managed memory, and startup duration on `/v1/metrics`
+- `CaptureMetrics` — built-in gauges and `UnimetryMetric` counter/histogram aggregation on `/v1/metrics`
 - `UnimetrySettings` — Resources asset edited from Project Settings, used when `UNIMETRY_OTLP_ENDPOINT` is unset

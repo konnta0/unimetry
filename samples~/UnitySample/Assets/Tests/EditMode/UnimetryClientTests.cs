@@ -80,6 +80,23 @@ namespace Unimetry.Tests
             Assert.DoesNotThrow(() => UnimetryClient.AddBreadcrumb("early"));
         }
 
+        [Test]
+        public void Initialize_ConfiguresMetricCaptureAndShutdownDisablesIt()
+        {
+            var options = CreateOptions(captureNativeCrashes: false);
+            options.CaptureMetrics = true;
+
+            UnimetryClient.Initialize(options);
+            Assert.IsTrue(UnimetryMetric.IsEnabled);
+
+            UnimetryClient.Shutdown();
+            Assert.IsFalse(UnimetryMetric.IsEnabled);
+
+            options.CaptureMetrics = false;
+            UnimetryClient.Initialize(options);
+            Assert.IsFalse(UnimetryMetric.IsEnabled);
+        }
+
 #if UNIMETRY_UNITASK
         [Test]
         public void AsyncApis_ExposeTaskAndUniTaskVariants()

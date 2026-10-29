@@ -186,6 +186,7 @@ namespace Unimetry
             if (current == null)
             {
                 Internal.EventPipeline.Configure(null, null, false);
+                Internal.MetricPipeline.Configure(null, false);
                 return;
             }
 
@@ -237,6 +238,7 @@ namespace Unimetry
                 else
                 {
                     Internal.EventPipeline.Configure(null, null, false);
+                    Internal.MetricPipeline.Configure(null, false);
                 }
             }
         }

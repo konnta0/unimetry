@@ -51,7 +51,7 @@ sequenceDiagram
 | --- | --- |
 | **Logs** | 例外本文、stacktrace 検索、Event、ログ基盤 (Loki 等) との統合 |
 | **Traces** | error span とゲームプレイ span。`Activity.Current`、`UnimetryTrace`、W3C `traceparent` にトレースがあるときは、エラーはそのトレースに載る |
-| **Metrics** | FPS、managed memory、起動時間の gauge |
+| **Metrics** | FPS、managed memory、起動時間のgaugeと、`UnimetryMetric`で記録するDelta counter / histogram |
 
 周囲にトレースが無いエラーは、これまでどおり独立した `trace_id` を持ちます。`SetBaggage` で置いた baggage (`user.id`、`session.id` など) は span attribute にコピーします。resource には入れません。
 
@@ -87,5 +87,5 @@ exporters:
 - `CaptureNativeCrashes` / `AddBreadcrumb` — Windows、macOS、iOS、Android プレイヤーのネイティブクラッシュ。次回起動時に `unimetry.record_type=crash` として送信
 - `UnimetryTrace` — ゲームプレイ span、W3C `traceparent`、baggage
 - `Runtime/link.xml` — `System.Diagnostics.DiagnosticSource` があるとき、IL2CPP 向けに `Activity` を残す
-- `CaptureMetrics` — FPS、managed memory、起動時間を `/v1/metrics` へ送る
+- `CaptureMetrics` — 組み込みgaugeと`UnimetryMetric`のcounter / histogram集約を `/v1/metrics` へ送る
 - `UnimetrySettings` — Project Settings で編集する Resources アセット。`UNIMETRY_OTLP_ENDPOINT` が無いときに使う

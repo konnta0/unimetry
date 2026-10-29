@@ -19,6 +19,7 @@ namespace Unimetry.Internal
         private readonly BackgroundFlusher flusher;
         private readonly OtlpExporter exporter;
         private readonly EventBuffer eventBuffer;
+        private readonly MetricBuffer metricBuffer;
         private readonly CrashArtifactStore crashStore;
         private readonly BreadcrumbLog breadcrumbs;
         private readonly ResourceState resourceState;
@@ -32,13 +33,21 @@ namespace Unimetry.Internal
             queue = new PersistentQueue(options.MaxQueueSize);
             exporter = new OtlpExporter(options);
             eventBuffer = new EventBuffer(options.MaxEventBuffer, resourceState, options.Sanitizer);
+            metricBuffer = new MetricBuffer(EventClock.UnixNano());
             var root = Path.Combine(Application.persistentDataPath, "unimetry");
             crashStore = new CrashArtifactStore(Path.Combine(root, "crashes"));
             breadcrumbs = new BreadcrumbLog(
                 options.BreadcrumbCapacity,
                 options.BreadcrumbWindow,
                 Path.Combine(root, "breadcrumbs.txt"));
-            flusher = new BackgroundFlusher(queue, exporter, options, eventBuffer, resourceState, IngestPreviousCrashes);
+            flusher = new BackgroundFlusher(
+                queue,
+                exporter,
+                options,
+                eventBuffer,
+                metricBuffer,
+                resourceState,
+                IngestPreviousCrashes);
             errorCapture = new ErrorCapture(options, EnqueueCapturedError);
         }
 
@@ -51,6 +60,7 @@ namespace Unimetry.Internal
 
             started = true;
             EventPipeline.Configure(eventBuffer, options.LogWriter, options.CaptureEvents);
+            MetricPipeline.Configure(metricBuffer, options.CaptureMetrics);
             TraceContext.SetSpanRecorder(EnqueueSpan, resourceState.Capture);
             if (options.CaptureNativeCrashes)
             {
@@ -126,6 +136,7 @@ namespace Unimetry.Internal
             PosixCrashHandler.Uninstall();
             TraceContext.Clear();
             EventPipeline.Configure(null, null, false);
+            MetricPipeline.Configure(null, false);
             errorCapture.Dispose();
             flusher.Dispose();
         }

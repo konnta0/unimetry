@@ -220,9 +220,14 @@ using (var span = UnimetryTrace.Start("match.load"))
 {
     var outgoing = UnimetryTrace.FormatTraceParent(span);
 }
+
+UnimetryMetric.AddCounter("game.match.started", unit: "{match}");
+UnimetryMetric.RecordHistogram("game.match.duration", 842.5, "ms");
 ```
 
-`ExtractTraceParent` は W3C `traceparent` を受けます。`FormatTraceParent` は現在の span を outgoing HTTP 用の `00-{trace}-{span}-01` にします。`Activity.Current` にトレースがあるときは、その trace id と親 span をエラーに使います。`System.Diagnostics.DiagnosticSource` があるときは `Runtime/link.xml` が IL2CPP 向けに `Activity` を残します。ゲームプレイ span は status OK の OTLP trace として送ります。baggage は span attribute にコピーします。`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` を `/v1/metrics` へ送ります。
+`ExtractTraceParent` は W3C `traceparent` を受けます。`FormatTraceParent` は現在の span を outgoing HTTP 用の `00-{trace}-{span}-01` にします。`Activity.Current` にトレースがあるときは、その trace id と親 span をエラーに使います。`System.Diagnostics.DiagnosticSource` があるときは `Runtime/link.xml` が IL2CPP 向けに `Activity` を残します。ゲームプレイ span は status OK の OTLP trace として送ります。baggage は span attribute にコピーします。
+
+`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` の gauge と、アプリケーションの counter / histogram を `/v1/metrics` へ送ります。`AddCounter` は正の差分を受け取り、単調増加のDelta Sumとして送信します。`RecordHistogram` は有限値を受け取り、OpenTelemetryの既定明示境界で集計します。アプリケーションメトリクスはflush間で集約し、送信失敗時はバッチを戻して再試行します。初期化ごとに最大128個の異なるメトリクス名を保持し、同じ名前をcounterとhistogramの両方には使えません。
 
 オフラインキューは AES-256-CBC と HMAC-SHA256 で暗号化します。鍵はキューの隣の `persistentDataPath/unimetry/offline.key` です。`queue.json` をそのまま読めなくします。ディレクトリごとコピーされた場合の保護にはなりません。
 
