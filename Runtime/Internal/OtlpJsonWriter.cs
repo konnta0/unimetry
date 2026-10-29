@@ -447,16 +447,21 @@ namespace Unimetry.Internal
                 for (var index = 0; index < metricBatch.Metrics.Count; index++)
                 {
                     var metric = metricBatch.Metrics[index];
-                    if (metric.Kind == MetricKind.Counter)
+                    if (metric.Kind == MetricKind.Counter || metric.Kind == MetricKind.UpDownCounter)
                     {
-                        AppendCounter(
+                        AppendSum(
                             builder,
                             metric,
                             metricBatch.StartTimeUnixNano,
                             metricBatch.TimeUnixNano,
+                            metric.Kind == MetricKind.Counter,
                             ref written);
                     }
-                    else
+                    else if (metric.Kind == MetricKind.Gauge)
+                    {
+                        AppendApplicationGauge(builder, metric, metricBatch.TimeUnixNano, ref written);
+                    }
+                    else if (metric.Kind == MetricKind.Histogram)
                     {
                         AppendHistogram(
                             builder,
@@ -507,16 +512,36 @@ namespace Unimetry.Internal
             builder.Append("}]}}");
         }
 
-        private static void AppendCounter(
+        private static void AppendSum(
             StringBuilder builder,
             MetricSnapshot metric,
             long startTimeUnixNano,
             long timeUnixNano,
+            bool isMonotonic,
             ref int written)
         {
             AppendMetricPrefix(builder, metric, ref written);
-            builder.Append("\"sum\":{\"aggregationTemporality\":1,\"isMonotonic\":true,\"dataPoints\":[{");
+            builder.Append("\"sum\":{\"aggregationTemporality\":1,\"isMonotonic\":");
+            builder.Append(isMonotonic ? "true" : "false");
+            builder.Append(",\"dataPoints\":[{");
             AppendMetricTimes(builder, startTimeUnixNano, timeUnixNano);
+            AppendMetricAttributes(builder, metric);
+            builder.Append(",\"asDouble\":");
+            builder.Append(metric.Sum.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append("}]}}");
+        }
+
+        private static void AppendApplicationGauge(
+            StringBuilder builder,
+            MetricSnapshot metric,
+            long timeUnixNano,
+            ref int written)
+        {
+            AppendMetricPrefix(builder, metric, ref written);
+            builder.Append("\"gauge\":{\"dataPoints\":[{\"timeUnixNano\":\"");
+            builder.Append(timeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append('"');
+            AppendMetricAttributes(builder, metric);
             builder.Append(",\"asDouble\":");
             builder.Append(metric.Sum.ToString("R", CultureInfo.InvariantCulture));
             builder.Append("}]}}");
@@ -532,6 +557,7 @@ namespace Unimetry.Internal
             AppendMetricPrefix(builder, metric, ref written);
             builder.Append("\"histogram\":{\"aggregationTemporality\":1,\"dataPoints\":[{");
             AppendMetricTimes(builder, startTimeUnixNano, timeUnixNano);
+            AppendMetricAttributes(builder, metric);
             builder.Append(",\"count\":\"");
             builder.Append(metric.Count.ToString(CultureInfo.InvariantCulture));
             builder.Append("\",\"sum\":");
@@ -601,6 +627,24 @@ namespace Unimetry.Internal
             builder.Append("\",\"timeUnixNano\":\"");
             builder.Append(timeUnixNano.ToString(CultureInfo.InvariantCulture));
             builder.Append('\"');
+        }
+
+        private static void AppendMetricAttributes(StringBuilder builder, MetricSnapshot metric)
+        {
+            if (metric.Attributes == null || metric.AttributeCount <= 0)
+            {
+                return;
+            }
+
+            var count = Math.Min(metric.AttributeCount, metric.Attributes.Length);
+            builder.Append(",\"attributes\":");
+            var attributes = new AttributeWriter(builder);
+            for (var index = 0; index < count; index++)
+            {
+                WriteEventTag(attributes, metric.Attributes[index]);
+            }
+
+            attributes.Complete();
         }
 
         private static void AppendBaggage(AttributeWriter attributes, string baggage)

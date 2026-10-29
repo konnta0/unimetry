@@ -10,14 +10,24 @@ namespace Unimetry.Internal
             UnimetryMetric.MetricEnabled = captureMetrics && nextBuffer != null ? 1 : 0;
         }
 
-        public static void AddCounter(string name, double delta, string unit)
+        public static void AddCounter(string name, double delta, string unit, MetricAttribute[] attributes)
         {
-            buffer?.AddCounter(name, delta, unit);
+            buffer?.AddCounter(name, delta, unit, attributes);
         }
 
-        public static void RecordHistogram(string name, double value, string unit)
+        public static void AddUpDownCounter(string name, double delta, string unit, MetricAttribute[] attributes)
         {
-            buffer?.RecordHistogram(name, value, unit);
+            buffer?.AddUpDownCounter(name, delta, unit, attributes);
+        }
+
+        public static void RecordGauge(string name, double value, string unit, MetricAttribute[] attributes)
+        {
+            buffer?.RecordGauge(name, value, unit, attributes);
+        }
+
+        public static void RecordHistogram(string name, double value, string unit, MetricAttribute[] attributes)
+        {
+            buffer?.RecordHistogram(name, value, unit, attributes);
         }
     }
 }

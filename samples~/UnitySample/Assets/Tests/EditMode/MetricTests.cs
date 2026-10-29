@@ -16,9 +16,39 @@ namespace Unimetry.Tests
         public void PublicApi_IsNoOpWhileMetricsAreDisabled()
         {
             UnimetryMetric.AddCounter("game.match.started");
+            UnimetryMetric.AddUpDownCounter("game.players.active", -1);
+            UnimetryMetric.RecordGauge("game.queue.depth", 4);
             UnimetryMetric.RecordHistogram("game.match.duration", 12.5, "ms");
 
             Assert.IsFalse(UnimetryMetric.IsEnabled);
+        }
+
+        [Test]
+        public void UpDownCounter_AggregatesPositiveAndNegativeDeltas()
+        {
+            var buffer = new MetricBuffer(100);
+            buffer.AddUpDownCounter("game.players.active", 5, "{player}");
+            buffer.AddUpDownCounter("game.players.active", -2, "{player}");
+
+            var metric = Find(buffer.Collect(200), "game.players.active");
+            Assert.NotNull(metric);
+            Assert.AreEqual(MetricKind.UpDownCounter, metric.Kind);
+            Assert.AreEqual(3d, metric.Sum);
+            Assert.AreEqual("{player}", metric.Unit);
+        }
+
+        [Test]
+        public void Gauge_ExportsOnlyLatestValueForEachSeries()
+        {
+            var buffer = new MetricBuffer(100);
+            buffer.RecordGauge("game.queue.depth", 4, "{item}");
+            buffer.RecordGauge("game.queue.depth", 7, "{item}");
+
+            var metric = Find(buffer.Collect(200), "game.queue.depth");
+            Assert.NotNull(metric);
+            Assert.AreEqual(MetricKind.Gauge, metric.Kind);
+            Assert.AreEqual(7d, metric.Sum);
+            Assert.IsTrue(buffer.Collect(300).IsEmpty);
         }
 
         [Test]
@@ -89,6 +119,65 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void GaugeRequeue_PreservesValueRecordedWhileExportWasInFlight()
+        {
+            var buffer = new MetricBuffer(100);
+            buffer.RecordGauge("game.queue.depth", 4, null);
+            var failed = buffer.Collect(200);
+
+            buffer.RecordGauge("game.queue.depth", 7, null);
+            buffer.Requeue(failed);
+
+            Assert.AreEqual(7d, Find(buffer.Collect(300), "game.queue.depth").Sum);
+        }
+
+        [Test]
+        public void Attributes_AreOrderIndependentAndCreateSeparateSeries()
+        {
+            var buffer = new MetricBuffer(100);
+            MetricPipeline.Configure(buffer, true);
+            UnimetryMetric.AddCounter(
+                "game.match.started",
+                2,
+                null,
+                new MetricAttribute("region", "jp"),
+                new MetricAttribute("ranked", true));
+            UnimetryMetric.AddCounter(
+                "game.match.started",
+                3,
+                null,
+                new MetricAttribute("ranked", true),
+                new MetricAttribute("region", "jp"));
+            UnimetryMetric.AddCounter(
+                "game.match.started",
+                4,
+                null,
+                new MetricAttribute("region", "us"),
+                new MetricAttribute("ranked", true));
+
+            var batch = buffer.Collect(200);
+            Assert.AreEqual(2, batch.Metrics.Count);
+            Assert.AreEqual(5d, FindByStringAttribute(batch, "region", "jp").Sum);
+            Assert.AreEqual(4d, FindByStringAttribute(batch, "region", "us").Sum);
+        }
+
+        [Test]
+        public void SeriesLimit_BoundsAttributeCardinality()
+        {
+            var buffer = new MetricBuffer(100);
+            for (var index = 0; index < MetricBuffer.MaxInstruments + 1; index++)
+            {
+                buffer.AddCounter(
+                    "game.match.started",
+                    1,
+                    null,
+                    new[] { new MetricAttribute("match", index) });
+            }
+
+            Assert.AreEqual(MetricBuffer.MaxInstruments, buffer.Collect(200).Metrics.Count);
+        }
+
+        [Test]
         public void MetricName_CannotChangeInstrumentKind()
         {
             var buffer = new MetricBuffer(100);
@@ -101,10 +190,22 @@ namespace Unimetry.Tests
         }
 
         [Test]
-        public void BuildMetricsPayload_IncludesCounterAndHistogram()
+        public void BuildMetricsPayload_IncludesAllApplicationMetricKindsAndTypedAttributes()
         {
             var buffer = new MetricBuffer(100);
-            buffer.AddCounter("game.match.started", 3, "{match}");
+            buffer.AddCounter(
+                "game.match.started",
+                3,
+                "{match}",
+                new[]
+                {
+                    new MetricAttribute("region", "jp"),
+                    new MetricAttribute("ranked", true),
+                    new MetricAttribute("mode", 2),
+                    new MetricAttribute("sample", 0.5),
+                });
+            buffer.AddUpDownCounter("game.players.active", -2, "{player}");
+            buffer.RecordGauge("game.queue.depth", 7, "{item}");
             buffer.RecordHistogram("game.match.duration", 25, "ms");
             buffer.RecordHistogram("game.match.duration", 75, "ms");
             var options = new UnimetryOptions
@@ -127,6 +228,15 @@ namespace Unimetry.Tests
             StringAssert.Contains("\"sum\":{\"aggregationTemporality\":1,\"isMonotonic\":true", payload);
             StringAssert.Contains("\"startTimeUnixNano\":\"100\"", payload);
             StringAssert.Contains("\"asDouble\":3", payload);
+            StringAssert.Contains("\"key\":\"region\",\"value\":{\"stringValue\":\"jp\"}", payload);
+            StringAssert.Contains("\"key\":\"ranked\",\"value\":{\"boolValue\":true}", payload);
+            StringAssert.Contains("\"key\":\"mode\",\"value\":{\"intValue\":\"2\"}", payload);
+            StringAssert.Contains("\"key\":\"sample\",\"value\":{\"doubleValue\":0.5}", payload);
+            StringAssert.Contains("\"name\":\"game.players.active\"", payload);
+            StringAssert.Contains("\"sum\":{\"aggregationTemporality\":1,\"isMonotonic\":false", payload);
+            StringAssert.Contains("\"asDouble\":-2", payload);
+            StringAssert.Contains("\"name\":\"game.queue.depth\"", payload);
+            StringAssert.Contains("\"gauge\":{\"dataPoints\":[{\"timeUnixNano\":\"200\",\"asDouble\":7", payload);
             StringAssert.Contains("\"name\":\"game.match.duration\"", payload);
             StringAssert.Contains("\"histogram\":{\"aggregationTemporality\":1", payload);
             StringAssert.Contains("\"count\":\"2\"", payload);
@@ -148,6 +258,26 @@ namespace Unimetry.Tests
                 if (string.Equals(batch.Metrics[index].Name, name, StringComparison.Ordinal))
                 {
                     return batch.Metrics[index];
+                }
+            }
+
+            return null;
+        }
+
+        private static MetricSnapshot FindByStringAttribute(MetricBatch batch, string key, string value)
+        {
+            for (var metricIndex = 0; metricIndex < batch.Metrics.Count; metricIndex++)
+            {
+                var metric = batch.Metrics[metricIndex];
+                for (var attributeIndex = 0; attributeIndex < metric.AttributeCount; attributeIndex++)
+                {
+                    var attribute = metric.Attributes[attributeIndex];
+                    if (attribute.Kind == EventTagKind.String &&
+                        string.Equals(attribute.Key, key, StringComparison.Ordinal) &&
+                        string.Equals(attribute.Text, value, StringComparison.Ordinal))
+                    {
+                        return metric;
+                    }
                 }
             }
 
