@@ -6,7 +6,7 @@ A crash and error instrumentation library for Unity. It treats managed exception
 
 It does not depend on the standard OpenTelemetry .NET SDK. A minimal OTLP exporter is implemented in this package so it can run under Unity's runtime limits (no `Meter`, limited `DiagnosticSource`, and similar constraints).
 
-## Current scope (v0.5.0)
+## Current scope (v0.6.0)
 
 | Area | Status |
 | --- | --- |
