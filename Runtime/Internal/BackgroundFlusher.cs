@@ -24,6 +24,7 @@ namespace Unimetry.Internal
         private UnimetryDispatcherBehaviour dispatcher;
         private bool started;
         private bool disposed;
+        private bool quitting;
         private float nextFlushTime;
         private int flushInProgress;
         private float fpsSum;
@@ -65,6 +66,12 @@ namespace Unimetry.Internal
             nextFlushTime = Time.realtimeSinceStartup + (float)options.FlushInterval.TotalSeconds;
             EnsureDispatcher();
             Application.quitting += HandleApplicationQuitting;
+            // Outside Play Mode the dispatcher's Update does not run, so deferred events would only be
+            // saved by Dispose, and a domain reload skips Dispose.
+            if (!Application.isPlaying)
+            {
+                eventBuffer?.SetSaveImmediately(true);
+            }
         }
 
         public void Tick()
@@ -74,6 +81,7 @@ namespace Unimetry.Internal
                 return;
             }
 
+            eventBuffer?.SaveIfDue();
             beforeFlush?.Invoke();
             SampleFrame();
             if (Time.realtimeSinceStartup < nextFlushTime)
@@ -153,6 +161,9 @@ namespace Unimetry.Internal
             }
 
             disposed = true;
+            // Shutdown leaves unsent events on disk, so deferred ones are saved now and any event that
+            // still reaches the buffer afterwards is saved as it is written.
+            eventBuffer?.SetSaveImmediately(true);
             Application.quitting -= HandleApplicationQuitting;
             cancellationTokenSource?.Cancel();
             cancellationTokenSource?.Dispose();
@@ -221,11 +232,29 @@ namespace Unimetry.Internal
 
         private void HandleApplicationQuitting()
         {
+            // Events still end during scene teardown (OnDisable / OnDestroy) after quitting starts, and no
+            // later frame runs to save them.
+            quitting = true;
+            eventBuffer?.SetSaveImmediately(true);
 #if UNIMETRY_UNITASK
             FlushAsync(CancellationToken.None).Forget();
 #else
             _ = FlushAsync(CancellationToken.None);
 #endif
+        }
+
+        /// <summary>
+        /// Saves events as they are written while the application is paused, because a paused
+        /// application may be killed without another frame.
+        /// </summary>
+        public void HandleApplicationPause(bool paused)
+        {
+            if (disposed || quitting)
+            {
+                return;
+            }
+
+            eventBuffer?.SetSaveImmediately(paused);
         }
 
         private void EnsureDispatcher()
@@ -268,6 +297,11 @@ namespace Unimetry.Internal
         private void Update()
         {
             owner?.Tick();
+        }
+
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            owner?.HandleApplicationPause(pauseStatus);
         }
     }
 }

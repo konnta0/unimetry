@@ -8,23 +8,40 @@ namespace Unimetry.Internal
     {
         public const int MaxTags = 8;
 
+        // Saving rewrites every unsent record (JSON, encryption, File.WriteAllBytes) on the calling
+        // thread, so saving once per event costs O(unsent) per event and stalls the frame when many
+        // events end together. Saves are coalesced instead: the first event after a quiet period is
+        // saved at once, and later events are saved once this interval has passed since the last save.
+        // A process that dies while events are deferred loses at most this interval plus one frame,
+        // as long as the flusher's Update runs.
+        internal static readonly TimeSpan SaveInterval = TimeSpan.FromSeconds(1);
+
         private readonly EventRecord[] records;
         private readonly object gate = new object();
         private readonly ResourceState resourceState;
         private readonly Func<CapturedError, CapturedError> sanitizer;
         private readonly string storagePath;
         private readonly string keyPath;
+        private readonly Func<long> clockTicks;
+        private readonly long saveIntervalTicks;
         private int head;
         private int tail;
         private int count;
         private int dropped;
+        private bool savePending;
+        private bool hasSaved;
+        private long lastSaveTicks;
+        private bool saveImmediately;
 
         public EventBuffer(
             int capacity,
             ResourceState resourceState = null,
             Func<CapturedError, CapturedError> sanitizer = null,
-            string storagePath = null)
+            string storagePath = null,
+            Func<long> clockTicks = null)
         {
+            this.clockTicks = clockTicks ?? System.Diagnostics.Stopwatch.GetTimestamp;
+            saveIntervalTicks = (long)(SaveInterval.TotalSeconds * System.Diagnostics.Stopwatch.Frequency);
             this.resourceState = resourceState;
             this.sanitizer = sanitizer;
             var root = Path.Combine(Application.persistentDataPath, "unimetry");
@@ -71,7 +88,7 @@ namespace Unimetry.Internal
                 }
 
                 count++;
-                SaveToDiskLocked();
+                SaveOrDeferLocked();
             }
         }
 
@@ -100,7 +117,7 @@ namespace Unimetry.Internal
                 }
 
                 count++;
-                SaveToDiskLocked();
+                SaveOrDeferLocked();
             }
         }
 
@@ -157,9 +174,65 @@ namespace Unimetry.Internal
 
                 if (commitCount > 0)
                 {
-                    SaveToDiskLocked();
+                    SaveNowLocked();
                 }
             }
+        }
+
+        /// <summary>
+        /// Saves deferred events once <see cref="SaveInterval"/> has passed since the last save.
+        /// Called every frame by the flusher.
+        /// </summary>
+        public void SaveIfDue()
+        {
+            lock (gate)
+            {
+                if (savePending && (saveImmediately || IsSaveDueLocked()))
+                {
+                    SaveNowLocked();
+                }
+            }
+        }
+
+        /// <summary>
+        /// While enabled, saves deferred events at once and saves every later event as it is written.
+        /// Used while the application is quitting, paused, or after shutdown, when no later frame is
+        /// guaranteed to save deferred events.
+        /// </summary>
+        public void SetSaveImmediately(bool enabled)
+        {
+            lock (gate)
+            {
+                saveImmediately = enabled;
+                if (enabled && savePending)
+                {
+                    SaveNowLocked();
+                }
+            }
+        }
+
+        private void SaveOrDeferLocked()
+        {
+            if (saveImmediately || IsSaveDueLocked())
+            {
+                SaveNowLocked();
+                return;
+            }
+
+            savePending = true;
+        }
+
+        private bool IsSaveDueLocked()
+        {
+            return !hasSaved || clockTicks() - lastSaveTicks >= saveIntervalTicks;
+        }
+
+        private void SaveNowLocked()
+        {
+            // While coalescing, a failed save is retried by the next due save instead of on every following event.
+            hasSaved = true;
+            lastSaveTicks = clockTicks();
+            savePending = !SaveToDiskLocked();
         }
 
         private static void CopyHandle(EventHandle handle, long endUnixNano, ref EventRecord slot)
@@ -328,14 +401,14 @@ namespace Unimetry.Internal
             }
         }
 
-        private void SaveToDiskLocked()
+        private bool SaveToDiskLocked()
         {
             try
             {
                 if (count == 0)
                 {
                     AtomicFile.TryDelete(storagePath);
-                    return;
+                    return true;
                 }
 
                 var envelope = new EventRecordEnvelope
@@ -358,10 +431,12 @@ namespace Unimetry.Internal
                 File.WriteAllBytes(
                     storagePath,
                     OfflineProtector.Protect(JsonUtility.ToJson(envelope), keyPath));
+                return true;
             }
             catch (Exception exception)
             {
                 Debug.LogWarning("Unimetry failed to persist events: " + exception.Message);
+                return false;
             }
         }
 
