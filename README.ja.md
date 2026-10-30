@@ -243,6 +243,10 @@ UnimetryMetric.RecordHistogram(
 
 **Project Settings > Unimetry** から `Assets/Resources/UnimetrySettings.asset` を作れます。`UNIMETRY_OTLP_ENDPOINT` が無いときは、起動時にこのアセットを読みます。`samples/collector` の Collector はトレースを Jaeger (`http://localhost:16686`) へ転送します。OpenUPM はこのリポジトリ直下の `package.json` (`com.konnta0.unimetry`) から公開できます。
 
+## 継続的インテグレーション
+
+pushとpull requestでは、Unityライセンスを使わずにUPMメタデータ、バージョン表記、Unity `.meta`ファイル、GUID重複、Aspireサンプルのビルドを検証します。Unity Editorの起動には認証が必要なため、EditModeテストは任意の手動workflowです。認証secretがなければテストをスキップしたことを表示して正常終了します。実行する場合は`UNITY_LICENSE`、`UNITY_LICENSING_SERVER`、またはUnityアカウント認証情報を設定します。
+
 ## ライセンス
 
 MIT

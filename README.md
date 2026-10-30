@@ -243,6 +243,10 @@ The offline queue is encrypted with AES-256-CBC and HMAC-SHA256. The key file is
 
 Create `Assets/Resources/UnimetrySettings.asset` from **Project Settings > Unimetry**. If `UNIMETRY_OTLP_ENDPOINT` is unset, startup loads that asset. The sample Collector in `samples/collector` forwards traces to Jaeger at `http://localhost:16686`. OpenUPM can publish this repo from the root `package.json` (`com.konnta0.unimetry`).
 
+## Continuous integration
+
+Pushes and pull requests run license-free checks for UPM metadata, version alignment, Unity `.meta` files, GUID uniqueness, and the Aspire sample build. Unity EditMode tests are an optional manual workflow because starting the Unity Editor requires activation. When activation secrets are absent, that workflow reports that the tests were skipped and exits successfully. Configure `UNITY_LICENSE`, a `UNITY_LICENSING_SERVER`, or Unity account credentials to enable it.
+
 ## License
 
 MIT

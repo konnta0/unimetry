@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-package:
+    name: Validate UPM package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate package metadata and Unity assets
+        run: .github/scripts/validate-package.sh
+
+  build-aspire:
+    name: Build Aspire sample
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore samples~/Aspire/Unimetry.Aspire.sln
+
+      - name: Build
+        run: dotnet build samples~/Aspire/Unimetry.Aspire.sln --configuration Release --no-restore --disable-build-servers -m:1 /p:UseSharedCompilation=false

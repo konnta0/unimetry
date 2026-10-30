@@ -1,12 +1,50 @@
-name: EditMode tests
+name: Unity EditMode tests
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
 
 jobs:
+  check-license:
+    name: Check Unity license
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check activation secrets
+        id: check
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_LICENSING_SERVER: ${{ secrets.UNITY_LICENSING_SERVER }}
+        run: |
+          if [[ -n "$UNITY_LICENSE" || -n "$UNITY_LICENSING_SERVER" || ( -n "$UNITY_EMAIL" && -n "$UNITY_PASSWORD" ) ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  license-not-configured:
+    name: Unity tests skipped
+    needs: check-license
+    if: needs.check-license.outputs.configured != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show activation instructions
+        run: |
+          echo "Unity EditMode tests were skipped because activation secrets are not configured."
+          echo "Configure UNITY_LICENSE, UNITY_LICENSING_SERVER, or UNITY_EMAIL and UNITY_PASSWORD to enable this optional workflow."
+          echo "The push and pull-request CI does not require a Unity license."
+
   editmode:
     name: Unity EditMode
+    needs: check-license
+    if: needs.check-license.outputs.configured == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,6 +56,8 @@ jobs:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_LICENSING_SERVER: ${{ secrets.UNITY_LICENSING_SERVER }}
         with:
           unityVersion: 2021.3.12f1
           projectPath: samples~/UnitySample
