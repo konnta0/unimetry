@@ -355,6 +355,8 @@ namespace Unimetry.Internal
 
             if (instruments.Count >= MaxInstruments)
             {
+                // Keep known series active and drop measurements that would create
+                // a new series after the global cardinality limit is reached.
                 return null;
             }
 

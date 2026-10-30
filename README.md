@@ -226,8 +226,16 @@ UnimetryMetric.AddCounter(
     1,
     "{match}",
     new MetricAttribute("region", "jp"));
-UnimetryMetric.AddUpDownCounter("game.players.active", -1, "{player}");
-UnimetryMetric.RecordGauge("game.queue.depth", 7, "{item}");
+UnimetryMetric.AddUpDownCounter(
+    "game.players.active",
+    -1,
+    "{player}",
+    new MetricAttribute("region", "jp"));
+UnimetryMetric.RecordGauge(
+    "game.queue.depth",
+    7,
+    "{item}",
+    new MetricAttribute("queue", "ranked"));
 UnimetryMetric.RecordHistogram(
     "game.match.duration",
     842.5,
@@ -237,7 +245,7 @@ UnimetryMetric.RecordHistogram(
 
 `ExtractTraceParent` accepts a W3C `traceparent`. `FormatTraceParent` writes the current span as `00-{trace}-{span}-01` for outgoing HTTP. Where `Activity.Current` has a trace, errors use that trace id and parent span. `Runtime/link.xml` keeps `Activity` for IL2CPP when `System.Diagnostics.DiagnosticSource` is present. Gameplay spans export as OTLP traces with status OK. Baggage is copied onto span attributes.
 
-`CaptureMetrics` (default on) exports `unity.fps`, `unity.memory.used_bytes`, and `unity.startup.duration_s` gauges plus application counters, up/down counters, gauges, and histograms to `/v1/metrics`. `AddCounter` accepts positive deltas and exports a monotonic delta sum. `AddUpDownCounter` accepts positive and negative deltas for additive current values. `RecordGauge` exports the latest value recorded before each flush. `RecordHistogram` accepts finite observations and uses the OpenTelemetry default explicit bucket boundaries. All application metric APIs accept typed `MetricAttribute` values. Keep them low-cardinality: at most four attributes are retained per measurement and at most 128 distinct time series are retained per initialization. A metric name has one fixed kind and unit. Metrics are aggregated between flushes; a failed request restores the batch for retry.
+`CaptureMetrics` (default on) exports `unity.fps`, `unity.memory.used_bytes`, and `unity.startup.duration_s` gauges plus application counters, up/down counters, gauges, and histograms to `/v1/metrics`. `AddCounter` accepts positive deltas and exports a monotonic delta sum. `AddUpDownCounter` accepts positive and negative deltas for additive current values. `RecordGauge` exports the latest value recorded before each flush. `RecordHistogram` accepts finite observations and uses the OpenTelemetry default explicit bucket boundaries. All application metric APIs accept typed `MetricAttribute` values, and each metric name plus canonical attribute set is aggregated as a separate time series. Keep attributes low-cardinality: at most four are retained per measurement and at most 128 distinct time series are retained per initialization. A measurement that would create a 129th series is ignored, while known series continue to aggregate. A metric name has one fixed kind and unit. Metrics are aggregated between flushes; a failed request restores the batch for retry.
 
 The offline queue is encrypted with AES-256-CBC and HMAC-SHA256. The key file is `persistentDataPath/unimetry/offline.key`, next to the queue, so this stops casual reading of `queue.json` and does not protect a copy of the whole directory.
 

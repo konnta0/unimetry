@@ -226,8 +226,16 @@ UnimetryMetric.AddCounter(
     1,
     "{match}",
     new MetricAttribute("region", "jp"));
-UnimetryMetric.AddUpDownCounter("game.players.active", -1, "{player}");
-UnimetryMetric.RecordGauge("game.queue.depth", 7, "{item}");
+UnimetryMetric.AddUpDownCounter(
+    "game.players.active",
+    -1,
+    "{player}",
+    new MetricAttribute("region", "jp"));
+UnimetryMetric.RecordGauge(
+    "game.queue.depth",
+    7,
+    "{item}",
+    new MetricAttribute("queue", "ranked"));
 UnimetryMetric.RecordHistogram(
     "game.match.duration",
     842.5,
@@ -237,7 +245,7 @@ UnimetryMetric.RecordHistogram(
 
 `ExtractTraceParent` は W3C `traceparent` を受けます。`FormatTraceParent` は現在の span を outgoing HTTP 用の `00-{trace}-{span}-01` にします。`Activity.Current` にトレースがあるときは、その trace id と親 span をエラーに使います。`System.Diagnostics.DiagnosticSource` があるときは `Runtime/link.xml` が IL2CPP 向けに `Activity` を残します。ゲームプレイ span は status OK の OTLP trace として送ります。baggage は span attribute にコピーします。
 
-`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` の gauge に加え、アプリケーションの counter / up-down counter / gauge / histogram を `/v1/metrics` へ送ります。`AddCounter` は正の差分を単調増加のDelta Sumとして送信します。`AddUpDownCounter` は加減算される現在値向けに正負の差分を受け取ります。`RecordGauge` はflush前に記録された最新値を送信します。`RecordHistogram` は有限値をOpenTelemetryの既定明示境界で集計します。すべてのアプリケーションメトリクスAPIで型付きの `MetricAttribute` を指定できます。カーディナリティを低く保つため、1計測につき最大4属性、初期化ごとに最大128時系列を保持します。同じメトリクス名のkindとunitは固定です。メトリクスはflush間で集約し、送信失敗時はバッチを戻して再試行します。
+`CaptureMetrics` (既定オン) は `unity.fps`、`unity.memory.used_bytes`、`unity.startup.duration_s` の gauge に加え、アプリケーションの counter / up-down counter / gauge / histogram を `/v1/metrics` へ送ります。`AddCounter` は正の差分を単調増加のDelta Sumとして送信します。`AddUpDownCounter` は加減算される現在値向けに正負の差分を受け取ります。`RecordGauge` はflush前に記録された最新値を送信します。`RecordHistogram` は有限値をOpenTelemetryの既定明示境界で集計します。すべてのアプリケーションメトリクスAPIで型付きの `MetricAttribute` を指定でき、メトリクス名と正規化済み属性セットの組み合わせごとに別の時系列として集約します。カーディナリティを低く保つため、1計測につき最大4属性、初期化ごとに最大128時系列を保持します。129番目の時系列を新規作成する計測は無視し、既存時系列への計測は引き続き集約します。同じメトリクス名のkindとunitは固定です。メトリクスはflush間で集約し、送信失敗時はバッチを戻して再試行します。
 
 オフラインキューは AES-256-CBC と HMAC-SHA256 で暗号化します。鍵はキューの隣の `persistentDataPath/unimetry/offline.key` です。`queue.json` をそのまま読めなくします。ディレクトリごとコピーされた場合の保護にはなりません。
 
