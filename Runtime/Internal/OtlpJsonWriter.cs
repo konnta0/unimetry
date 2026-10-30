@@ -427,17 +427,22 @@ namespace Unimetry.Internal
             AppendResourceAttributes(builder, resource ?? ResourceSnapshot.FromOptions(options));
             builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.7.0\"},\"metrics\":[");
             var written = 0;
-            if (!double.IsNaN(framesPerSecond) && !double.IsInfinity(framesPerSecond) && framesPerSecond >= 0)
+            if (options.CaptureBuiltInMetrics &&
+                !double.IsNaN(framesPerSecond) &&
+                !double.IsInfinity(framesPerSecond) &&
+                framesPerSecond >= 0)
             {
                 AppendGauge(builder, "unity.fps", framesPerSecond, timeUnixNano, ref written);
             }
 
-            if (usedBytes >= 0)
+            if (options.CaptureBuiltInMetrics && usedBytes >= 0)
             {
                 AppendGauge(builder, "unity.memory.used_bytes", usedBytes, timeUnixNano, ref written);
             }
 
-            if (!double.IsNaN(startupSeconds) && startupSeconds >= 0)
+            if (options.CaptureBuiltInMetrics &&
+                !double.IsNaN(startupSeconds) &&
+                startupSeconds >= 0)
             {
                 AppendGauge(builder, "unity.startup.duration_s", startupSeconds, timeUnixNano, ref written);
             }

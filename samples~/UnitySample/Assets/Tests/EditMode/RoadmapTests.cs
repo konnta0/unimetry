@@ -87,6 +87,8 @@ namespace Unimetry.Tests
                 ServiceName = "unimetry-test",
             };
 
+            Assert.IsTrue(options.CaptureBuiltInMetrics);
+
             var payload = OtlpJsonWriter.BuildMetricsPayload(options, 1_700_000_000_000_000_000L, 59.5, 4096, 1.25);
 
             StringAssert.Contains("\"resourceMetrics\"", payload);
@@ -94,6 +96,54 @@ namespace Unimetry.Tests
             StringAssert.Contains("\"name\":\"unity.memory.used_bytes\"", payload);
             StringAssert.Contains("\"name\":\"unity.startup.duration_s\"", payload);
             StringAssert.Contains("59.5", payload);
+        }
+
+        [Test]
+        public void BuildMetricsPayload_WhenBuiltInsDisabled_OmitsAllBuiltInsAndKeepsApplicationMetrics()
+        {
+            var options = new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                ServiceName = "unimetry-test",
+                CaptureBuiltInMetrics = false,
+            };
+            var buffer = new MetricBuffer(100);
+            buffer.RecordGauge("game.render.quality", 3, "{level}");
+            buffer.AddCounter("game.match.started", 2, "{match}");
+            buffer.RecordHistogram("game.match.duration", 25, "ms");
+
+            var payload = OtlpJsonWriter.BuildMetricsPayload(
+                null,
+                options,
+                200,
+                59.5,
+                4096,
+                1.25,
+                buffer.Collect(200));
+
+            StringAssert.DoesNotContain("\"name\":\"unity.fps\"", payload);
+            StringAssert.DoesNotContain("\"name\":\"unity.memory.used_bytes\"", payload);
+            StringAssert.DoesNotContain("\"name\":\"unity.startup.duration_s\"", payload);
+            StringAssert.Contains("\"name\":\"game.render.quality\"", payload);
+            StringAssert.Contains("\"name\":\"game.match.started\"", payload);
+            StringAssert.Contains("\"name\":\"game.match.duration\"", payload);
+            StringAssert.Contains("\"asDouble\":3", payload);
+        }
+
+        [Test]
+        public void Settings_MapsBuiltInMetricOptOut()
+        {
+            var settings = ScriptableObject.CreateInstance<UnimetrySettings>();
+            try
+            {
+                Assert.IsTrue(settings.ToOptions().CaptureBuiltInMetrics);
+                settings.CaptureBuiltInMetrics = false;
+                Assert.IsFalse(settings.ToOptions().CaptureBuiltInMetrics);
+            }
+            finally
+            {
+                Object.DestroyImmediate(settings);
+            }
         }
 
         [Test]

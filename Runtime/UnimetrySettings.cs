@@ -34,8 +34,11 @@ namespace Unimetry
         /// <summary>Write a size-capped minidump on Windows.</summary>
         public bool CaptureMinidumps;
 
-        /// <summary>Export FPS, memory, and startup gauges.</summary>
+        /// <summary>Export application metrics and enabled built-in metrics.</summary>
         public bool CaptureMetrics = true;
+
+        /// <summary>Collect and export built-in FPS, memory, and startup gauges.</summary>
+        public bool CaptureBuiltInMetrics = true;
 
         /// <summary>Builds runtime options from this asset.</summary>
         /// <returns>Options ready for <see cref="UnimetryClient.Initialize"/>.</returns>
@@ -52,6 +55,7 @@ namespace Unimetry
                 CaptureNativeCrashes = CaptureNativeCrashes,
                 CaptureMinidumps = CaptureMinidumps,
                 CaptureMetrics = CaptureMetrics,
+                CaptureBuiltInMetrics = CaptureBuiltInMetrics,
             };
         }
     }

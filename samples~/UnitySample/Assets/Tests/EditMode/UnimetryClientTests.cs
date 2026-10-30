@@ -92,6 +92,13 @@ namespace Unimetry.Tests
             UnimetryClient.Shutdown();
             Assert.IsFalse(UnimetryMetric.IsEnabled);
 
+            options.CaptureBuiltInMetrics = false;
+            UnimetryClient.Initialize(options);
+            Assert.IsTrue(UnimetryMetric.IsEnabled);
+
+            UnimetryClient.Shutdown();
+            Assert.IsFalse(UnimetryMetric.IsEnabled);
+
             options.CaptureMetrics = false;
             UnimetryClient.Initialize(options);
             Assert.IsFalse(UnimetryMetric.IsEnabled);

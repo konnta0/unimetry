@@ -30,7 +30,7 @@ namespace Unimetry.Internal
         private int flushInProgress;
         private float fpsSum;
         private int fpsCount;
-        private float startupSeconds;
+        private float startupSeconds = float.NaN;
 
         public BackgroundFlusher(
             PersistentQueue queue,
@@ -64,7 +64,10 @@ namespace Unimetry.Internal
             }
 
             started = true;
-            startupSeconds = Time.realtimeSinceStartup;
+            if (options.CaptureMetrics && options.CaptureBuiltInMetrics)
+            {
+                startupSeconds = Time.realtimeSinceStartup;
+            }
             cancellationTokenSource = new CancellationTokenSource();
             nextFlushTime = Time.realtimeSinceStartup + (float)options.FlushInterval.TotalSeconds;
             EnsureDispatcher();
@@ -86,7 +89,10 @@ namespace Unimetry.Internal
 
             eventBuffer?.SaveIfDue();
             beforeFlush?.Invoke();
-            SampleFrame();
+            if (options.CaptureMetrics && options.CaptureBuiltInMetrics)
+            {
+                SampleFrame();
+            }
             if (Time.realtimeSinceStartup < nextFlushTime)
             {
                 return;
@@ -189,11 +195,6 @@ namespace Unimetry.Internal
 
         private void SampleFrame()
         {
-            if (!options.CaptureMetrics)
-            {
-                return;
-            }
-
             var delta = Time.unscaledDeltaTime;
             if (delta <= 0f)
             {
@@ -212,15 +213,27 @@ namespace Unimetry.Internal
             }
 
             var frames = double.NaN;
-            if (fpsCount > 0)
+            if (options.CaptureBuiltInMetrics && fpsCount > 0)
             {
                 frames = fpsSum / fpsCount;
+                fpsSum = 0f;
+                fpsCount = 0;
+            }
+            else if (!options.CaptureBuiltInMetrics)
+            {
+                // Discard samples collected before a runtime option change so they are never exported later.
                 fpsSum = 0f;
                 fpsCount = 0;
             }
 
             var timeUnixNano = EventClock.UnixNano();
             var metricBatch = metricBuffer?.Collect(timeUnixNano);
+            if (!options.CaptureBuiltInMetrics && (metricBatch == null || metricBatch.IsEmpty))
+            {
+                return;
+            }
+
+            var usedBytes = options.CaptureBuiltInMetrics ? GC.GetTotalMemory(false) : -1L;
             try
             {
                 var payload = OtlpJsonWriter.BuildMetricsPayload(
@@ -228,7 +241,7 @@ namespace Unimetry.Internal
                     options,
                     timeUnixNano,
                     frames,
-                    GC.GetTotalMemory(false),
+                    usedBytes,
                     startupSeconds,
                     metricBatch);
                 var sent = await exporter.ExportMetricsAsync(payload, cancellationToken);

@@ -88,9 +88,15 @@ namespace Unimetry
         public bool CaptureEvents { get; set; } = true;
 
         /// <summary>
-        /// When true, flush exports FPS, managed memory, and startup duration as OTLP gauges.
+        /// When true, application metrics and enabled built-in metrics are exported through OTLP.
         /// </summary>
         public bool CaptureMetrics { get; set; } = true;
+
+        /// <summary>
+        /// When true, Unimetry collects and exports its built-in FPS, managed memory, and startup gauges.
+        /// Disable this to stop all built-in metric measurements without disabling application metrics.
+        /// </summary>
+        public bool CaptureBuiltInMetrics { get; set; } = true;
 
         /// <summary>
         /// Maximum number of completed events retained in the encrypted offline event queue.

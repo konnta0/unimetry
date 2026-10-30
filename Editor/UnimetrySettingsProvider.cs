@@ -48,6 +48,7 @@ namespace Unimetry.Editor
             EditorGUILayout.PropertyField(serialized.FindProperty("CaptureNativeCrashes"));
             EditorGUILayout.PropertyField(serialized.FindProperty("CaptureMinidumps"));
             EditorGUILayout.PropertyField(serialized.FindProperty("CaptureMetrics"));
+            EditorGUILayout.PropertyField(serialized.FindProperty("CaptureBuiltInMetrics"));
             serialized.ApplyModifiedProperties();
         }
 
