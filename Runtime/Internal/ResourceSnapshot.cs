@@ -108,6 +108,10 @@ namespace Unimetry.Internal
         private readonly object gate = new object();
         private readonly Dictionary<string, string> attributes = new Dictionary<string, string>(StringComparer.Ordinal);
 
+        // Reused until Set replaces it. Events keep the instance they captured, so a later Set must
+        // not mutate that instance.
+        private ResourceSnapshot snapshot;
+
         public ResourceState(UnimetryOptions options)
         {
             var initial = ResourceSnapshot.FromOptions(options);
@@ -115,13 +119,15 @@ namespace Unimetry.Internal
             {
                 attributes[initial.Attributes[index].Key] = initial.Attributes[index].Value;
             }
+
+            snapshot = initial;
         }
 
         public ResourceSnapshot Capture()
         {
             lock (gate)
             {
-                return ResourceSnapshot.FromDictionary(attributes);
+                return snapshot;
             }
         }
 
@@ -142,6 +148,8 @@ namespace Unimetry.Internal
                 {
                     attributes[key] = value;
                 }
+
+                snapshot = ResourceSnapshot.FromDictionary(attributes);
             }
         }
     }

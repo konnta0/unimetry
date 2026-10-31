@@ -1,13 +1,13 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
 
 namespace Unimetry.Internal
 {
     internal static class JsonEscaper
     {
-        public static void AppendEscaped(StringBuilder builder, string value)
+        public static void AppendEscaped(JsonText builder, string value)
         {
             if (string.IsNullOrEmpty(value))
             {
@@ -38,7 +38,7 @@ namespace Unimetry.Internal
                         if (character < 32)
                         {
                             builder.Append("\\u");
-                            builder.Append(((int)character).ToString("x4"));
+                            builder.AppendHex4((int)character);
                         }
                         else
                         {
@@ -66,8 +66,6 @@ namespace Unimetry.Internal
             int eventCount,
             UnimetryOptions options)
         {
-            var builder = new StringBuilder(2048);
-            builder.Append("{\"resourceLogs\":[");
             var errorCount = items == null ? 0 : items.Count;
             if (eventCount < 0)
             {
@@ -79,19 +77,22 @@ namespace Unimetry.Internal
                 eventCount = events == null ? 0 : events.Length;
             }
 
-            var fallback = ResourceSnapshot.ForLegacyRecord(options);
+            using var builder = new JsonText(1024 + errorCount * 1024 + eventCount * 512);
+            builder.Append("{\"resourceLogs\":[");
+
+            ResourceSnapshot fallback = null;
             var resources = new List<ResourceSnapshot>();
             for (var index = 0; index < errorCount; index++)
             {
                 if (!items[index].SkipLog)
                 {
-                    AddResource(resources, items[index].Resource ?? fallback);
+                    AddResource(resources, ResolveResource(ref fallback, items[index].Resource, options));
                 }
             }
 
             for (var index = 0; index < eventCount; index++)
             {
-                AddResource(resources, events[index].Resource ?? fallback);
+                AddResource(resources, ResolveResource(ref fallback, events[index].Resource, options));
             }
 
             for (var resourceIndex = 0; resourceIndex < resources.Count; resourceIndex++)
@@ -108,7 +109,7 @@ namespace Unimetry.Internal
                 var writtenLogs = 0;
                 for (var index = 0; index < errorCount; index++)
                 {
-                    if (items[index].SkipLog || !ResourceSnapshot.Equivalent(items[index].Resource ?? fallback, resource))
+                    if (items[index].SkipLog || !ResourceSnapshot.Equivalent(ResolveResource(ref fallback, items[index].Resource, options), resource))
                     {
                         continue;
                     }
@@ -123,7 +124,7 @@ namespace Unimetry.Internal
 
                 for (var index = 0; index < eventCount; index++)
                 {
-                    if (!ResourceSnapshot.Equivalent(events[index].Resource ?? fallback, resource))
+                    if (!ResourceSnapshot.Equivalent(ResolveResource(ref fallback, events[index].Resource, options), resource))
                     {
                         continue;
                     }
@@ -140,22 +141,22 @@ namespace Unimetry.Internal
             }
 
             builder.Append("]}");
-            return builder.ToString();
+            return builder.ToPayload();
         }
 
         public static string BuildTracesPayload(
             IReadOnlyList<PendingExport> items,
             UnimetryOptions options)
         {
-            var builder = new StringBuilder(2048);
+            using var builder = new JsonText(1024 + (items == null ? 0 : items.Count) * 1024);
             builder.Append("{\"resourceSpans\":[");
-            var fallback = ResourceSnapshot.ForLegacyRecord(options);
+            ResourceSnapshot fallback = null;
             var resources = new List<ResourceSnapshot>();
             for (var index = 0; index < items.Count; index++)
             {
                 if (items[index].IncludeSpan)
                 {
-                    AddResource(resources, items[index].Resource ?? fallback);
+                    AddResource(resources, ResolveResource(ref fallback, items[index].Resource, options));
                 }
             }
 
@@ -174,7 +175,7 @@ namespace Unimetry.Internal
                 for (var index = 0; index < items.Count; index++)
                 {
                     if (!items[index].IncludeSpan ||
-                        !ResourceSnapshot.Equivalent(items[index].Resource ?? fallback, resource))
+                        !ResourceSnapshot.Equivalent(ResolveResource(ref fallback, items[index].Resource, options), resource))
                     {
                         continue;
                     }
@@ -192,10 +193,10 @@ namespace Unimetry.Internal
             }
 
             builder.Append("]}");
-            return builder.ToString();
+            return builder.ToPayload();
         }
 
-        private static void AppendResourceAttributes(StringBuilder builder, ResourceSnapshot resource)
+        private static void AppendResourceAttributes(JsonText builder, ResourceSnapshot resource)
         {
             var attributes = new AttributeWriter(builder);
             if (resource?.Attributes != null)
@@ -213,16 +214,16 @@ namespace Unimetry.Internal
             attributes.Complete();
         }
 
-        private static void AppendLogRecord(StringBuilder builder, PendingExport item)
+        private static void AppendLogRecord(JsonText builder, PendingExport item)
         {
             Enum.TryParse(item.Severity, out CapturedErrorSeverity severity);
             var mappedSeverity = SeverityMapping.FromCapturedError(severity);
 
             builder.Append('{');
             builder.Append("\"timeUnixNano\":\"");
-            builder.Append(item.CapturedAtUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(item.CapturedAtUnixNano);
             builder.Append("\",\"observedTimeUnixNano\":\"");
-            builder.Append(item.CapturedAtUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(item.CapturedAtUnixNano);
             builder.Append("\",\"severityNumber\":");
             builder.Append(mappedSeverity.Number);
             builder.Append(",\"severityText\":\"");
@@ -238,7 +239,7 @@ namespace Unimetry.Internal
             builder.Append('}');
         }
 
-        private static void AppendSpan(StringBuilder builder, PendingExport item)
+        private static void AppendSpan(JsonText builder, PendingExport item)
         {
             var endTime = item.CapturedAtUnixNano;
             var startTime = item.StartUnixNano > 0 && item.StartUnixNano <= endTime
@@ -257,11 +258,11 @@ namespace Unimetry.Internal
             JsonEscaper.AppendEscaped(builder, string.IsNullOrEmpty(item.SpanName) ? "unity.error" : item.SpanName);
             builder.Append("\",\"kind\":1");
             builder.Append(",\"startTimeUnixNano\":\"");
-            builder.Append(startTime.ToString(CultureInfo.InvariantCulture));
+            builder.Append(startTime);
             builder.Append("\",\"endTimeUnixNano\":\"");
-            builder.Append(endTime.ToString(CultureInfo.InvariantCulture));
+            builder.Append(endTime);
             builder.Append("\",\"status\":{\"code\":");
-            builder.Append(statusCode.ToString(CultureInfo.InvariantCulture));
+            builder.Append(statusCode);
             builder.Append(",\"message\":\"");
             JsonEscaper.AppendEscaped(builder, item.Message);
             builder.Append("\"},\"attributes\":");
@@ -269,7 +270,7 @@ namespace Unimetry.Internal
             if (statusCode != 1)
             {
                 builder.Append(",\"events\":[{\"timeUnixNano\":\"");
-                builder.Append(endTime.ToString(CultureInfo.InvariantCulture));
+                builder.Append(endTime);
                 builder.Append("\",\"name\":\"exception\",\"attributes\":");
                 AppendExceptionEventAttributes(builder, item);
                 builder.Append("}]");
@@ -278,7 +279,7 @@ namespace Unimetry.Internal
             builder.Append('}');
         }
 
-        private static void AppendEventRecord(StringBuilder builder, EventRecord item)
+        private static void AppendEventRecord(JsonText builder, EventRecord item)
         {
             var mappedSeverity = SeverityMapping.FromEventSeverity(item.SeverityNumber);
             var duration = item.EndUnixNano - item.StartUnixNano;
@@ -289,9 +290,9 @@ namespace Unimetry.Internal
 
             builder.Append('{');
             builder.Append("\"timeUnixNano\":\"");
-            builder.Append(item.StartUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(item.StartUnixNano);
             builder.Append("\",\"observedTimeUnixNano\":\"");
-            builder.Append(item.EndUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(item.EndUnixNano);
             builder.Append("\",\"severityNumber\":");
             builder.Append(mappedSeverity.Number);
             builder.Append(",\"severityText\":\"");
@@ -304,7 +305,7 @@ namespace Unimetry.Internal
             if (item.DroppedTags > 0)
             {
                 builder.Append(",\"droppedAttributesCount\":\"");
-                builder.Append(item.DroppedTags.ToString(CultureInfo.InvariantCulture));
+                builder.Append(item.DroppedTags);
                 builder.Append('"');
             }
 
@@ -313,7 +314,7 @@ namespace Unimetry.Internal
             builder.Append('}');
         }
 
-        private static void AppendEventAttributes(StringBuilder builder, EventRecord item, long durationNanos)
+        private static void AppendEventAttributes(JsonText builder, EventRecord item, long durationNanos)
         {
             var attributes = new AttributeWriter(builder);
             attributes.WriteInt("unimetry.event.duration_ns", durationNanos);
@@ -373,7 +374,7 @@ namespace Unimetry.Internal
             }
         }
 
-        private static void AppendErrorAttributes(StringBuilder builder, PendingExport item)
+        private static void AppendErrorAttributes(JsonText builder, PendingExport item)
         {
             var attributes = new AttributeWriter(builder);
             attributes.WriteString("unimetry.source", item.Source);
@@ -422,7 +423,8 @@ namespace Unimetry.Internal
             double startupSeconds,
             MetricBatch metricBatch = null)
         {
-            var builder = new StringBuilder(1024);
+            var metricCount = metricBatch?.Metrics == null ? 0 : metricBatch.Metrics.Count;
+            using var builder = new JsonText(1024 + metricCount * 768);
             builder.Append("{\"resourceMetrics\":[{\"resource\":{\"attributes\":");
             AppendResourceAttributes(builder, resource ?? ResourceSnapshot.FromOptions(options));
             builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.8.0\"},\"metrics\":[");
@@ -479,7 +481,25 @@ namespace Unimetry.Internal
             }
 
             builder.Append("]}]}]}");
-            return builder.ToString();
+            return builder.ToPayload();
+        }
+
+        private static ResourceSnapshot ResolveResource(
+            ref ResourceSnapshot fallback,
+            ResourceSnapshot candidate,
+            UnimetryOptions options)
+        {
+            if (candidate != null)
+            {
+                return candidate;
+            }
+
+            if (fallback == null)
+            {
+                fallback = ResourceSnapshot.ForLegacyRecord(options);
+            }
+
+            return fallback;
         }
 
         private static void AddResource(List<ResourceSnapshot> resources, ResourceSnapshot candidate)
@@ -496,7 +516,7 @@ namespace Unimetry.Internal
         }
 
         private static void AppendGauge(
-            StringBuilder builder,
+            JsonText builder,
             string name,
             double value,
             long timeUnixNano,
@@ -511,14 +531,14 @@ namespace Unimetry.Internal
             builder.Append("{\"name\":\"");
             JsonEscaper.AppendEscaped(builder, name);
             builder.Append("\",\"gauge\":{\"dataPoints\":[{\"timeUnixNano\":\"");
-            builder.Append(timeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(timeUnixNano);
             builder.Append("\",\"asDouble\":");
-            builder.Append(value.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(value);
             builder.Append("}]}}");
         }
 
         private static void AppendSum(
-            StringBuilder builder,
+            JsonText builder,
             MetricSnapshot metric,
             long startTimeUnixNano,
             long timeUnixNano,
@@ -532,28 +552,28 @@ namespace Unimetry.Internal
             AppendMetricTimes(builder, startTimeUnixNano, timeUnixNano);
             AppendMetricAttributes(builder, metric);
             builder.Append(",\"asDouble\":");
-            builder.Append(metric.Sum.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(metric.Sum);
             builder.Append("}]}}");
         }
 
         private static void AppendApplicationGauge(
-            StringBuilder builder,
+            JsonText builder,
             MetricSnapshot metric,
             long timeUnixNano,
             ref int written)
         {
             AppendMetricPrefix(builder, metric, ref written);
             builder.Append("\"gauge\":{\"dataPoints\":[{\"timeUnixNano\":\"");
-            builder.Append(timeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(timeUnixNano);
             builder.Append('"');
             AppendMetricAttributes(builder, metric);
             builder.Append(",\"asDouble\":");
-            builder.Append(metric.Sum.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(metric.Sum);
             builder.Append("}]}}");
         }
 
         private static void AppendHistogram(
-            StringBuilder builder,
+            JsonText builder,
             MetricSnapshot metric,
             long startTimeUnixNano,
             long timeUnixNano,
@@ -564,9 +584,9 @@ namespace Unimetry.Internal
             AppendMetricTimes(builder, startTimeUnixNano, timeUnixNano);
             AppendMetricAttributes(builder, metric);
             builder.Append(",\"count\":\"");
-            builder.Append(metric.Count.ToString(CultureInfo.InvariantCulture));
+            builder.Append(metric.Count);
             builder.Append("\",\"sum\":");
-            builder.Append(metric.Sum.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(metric.Sum);
             builder.Append(",\"bucketCounts\":[");
             for (var index = 0; index < metric.BucketCounts.Length; index++)
             {
@@ -576,7 +596,7 @@ namespace Unimetry.Internal
                 }
 
                 builder.Append('\"');
-                builder.Append(metric.BucketCounts[index].ToString(CultureInfo.InvariantCulture));
+                builder.Append(metric.BucketCounts[index]);
                 builder.Append('\"');
             }
 
@@ -588,18 +608,18 @@ namespace Unimetry.Internal
                     builder.Append(',');
                 }
 
-                builder.Append(metric.ExplicitBounds[index].ToString("R", CultureInfo.InvariantCulture));
+                builder.Append(metric.ExplicitBounds[index]);
             }
 
             builder.Append("],\"min\":");
-            builder.Append(metric.Min.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(metric.Min);
             builder.Append(",\"max\":");
-            builder.Append(metric.Max.ToString("R", CultureInfo.InvariantCulture));
+            builder.Append(metric.Max);
             builder.Append("}]}}");
         }
 
         private static void AppendMetricPrefix(
-            StringBuilder builder,
+            JsonText builder,
             MetricSnapshot metric,
             ref int written)
         {
@@ -623,18 +643,18 @@ namespace Unimetry.Internal
         }
 
         private static void AppendMetricTimes(
-            StringBuilder builder,
+            JsonText builder,
             long startTimeUnixNano,
             long timeUnixNano)
         {
             builder.Append("\"startTimeUnixNano\":\"");
-            builder.Append(startTimeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(startTimeUnixNano);
             builder.Append("\",\"timeUnixNano\":\"");
-            builder.Append(timeUnixNano.ToString(CultureInfo.InvariantCulture));
+            builder.Append(timeUnixNano);
             builder.Append('\"');
         }
 
-        private static void AppendMetricAttributes(StringBuilder builder, MetricSnapshot metric)
+        private static void AppendMetricAttributes(JsonText builder, MetricSnapshot metric)
         {
             if (metric.Attributes == null || metric.AttributeCount <= 0)
             {
@@ -673,7 +693,7 @@ namespace Unimetry.Internal
             }
         }
 
-        private static void AppendExceptionEventAttributes(StringBuilder builder, PendingExport item)
+        private static void AppendExceptionEventAttributes(JsonText builder, PendingExport item)
         {
             var attributes = new AttributeWriter(builder);
             attributes.WriteString("exception.type", item.ExceptionType);
@@ -684,10 +704,10 @@ namespace Unimetry.Internal
 
         private sealed class AttributeWriter
         {
-            private readonly StringBuilder builder;
+            private readonly JsonText builder;
             private bool hasItems;
 
-            public AttributeWriter(StringBuilder builder)
+            public AttributeWriter(JsonText builder)
             {
                 this.builder = builder;
                 builder.Append('[');
@@ -729,7 +749,7 @@ namespace Unimetry.Internal
                 builder.Append("{\"key\":\"");
                 JsonEscaper.AppendEscaped(builder, key);
                 builder.Append("\",\"value\":{\"intValue\":\"");
-                builder.Append(value.ToString(CultureInfo.InvariantCulture));
+                builder.Append(value);
                 builder.Append("\"}}");
             }
 
@@ -744,7 +764,7 @@ namespace Unimetry.Internal
                 builder.Append("{\"key\":\"");
                 JsonEscaper.AppendEscaped(builder, key);
                 builder.Append("\",\"value\":{\"doubleValue\":");
-                builder.Append(value.ToString("R", CultureInfo.InvariantCulture));
+                builder.Append(value);
                 builder.Append("}}");
             }
 
@@ -777,6 +797,118 @@ namespace Unimetry.Internal
 
                 hasItems = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// Builds one JSON payload in a pooled character buffer so export does not allocate intermediate strings.
+    /// </summary>
+    internal sealed class JsonText : IDisposable
+    {
+        private char[] buffer;
+        private int length;
+
+        internal JsonText(int capacity)
+        {
+            if (capacity < 256)
+            {
+                capacity = 256;
+            }
+
+            buffer = ArrayPool<char>.Shared.Rent(capacity);
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            var rented = buffer;
+            if (rented == null)
+            {
+                return;
+            }
+
+            buffer = null;
+            length = 0;
+            ArrayPool<char>.Shared.Return(rented, clearArray: true);
+        }
+
+        internal string ToPayload()
+        {
+            return new string(buffer, 0, length);
+        }
+
+        internal void Append(char value)
+        {
+            Ensure(1);
+            buffer[length++] = value;
+        }
+
+        internal void Append(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return;
+            }
+
+            Ensure(value.Length);
+            value.CopyTo(0, buffer, length, value.Length);
+            length += value.Length;
+        }
+
+        internal void Append(long value)
+        {
+            Ensure(20);
+            if (!value.TryFormat(buffer.AsSpan(length), out var written, default, CultureInfo.InvariantCulture))
+            {
+                Append(value.ToString(CultureInfo.InvariantCulture));
+                return;
+            }
+
+            length += written;
+        }
+
+        internal void Append(double value)
+        {
+            Ensure(64);
+            if (!value.TryFormat(buffer.AsSpan(length), out var written, "R", CultureInfo.InvariantCulture))
+            {
+                Append(value.ToString("R", CultureInfo.InvariantCulture));
+                return;
+            }
+
+            length += written;
+        }
+
+        internal void AppendHex4(int value)
+        {
+            Ensure(8);
+            if (!value.TryFormat(buffer.AsSpan(length), out var written, "x4", CultureInfo.InvariantCulture))
+            {
+                Append(value.ToString("x4", CultureInfo.InvariantCulture));
+                return;
+            }
+
+            length += written;
+        }
+
+        private void Ensure(int additional)
+        {
+            if (buffer.Length - length >= additional)
+            {
+                return;
+            }
+
+            var needed = length + additional;
+            var size = buffer.Length * 2;
+            if (size < needed)
+            {
+                size = needed;
+            }
+
+            var grown = ArrayPool<char>.Shared.Rent(size);
+            Array.Copy(buffer, 0, grown, 0, length);
+            ArrayPool<char>.Shared.Return(buffer, clearArray: true);
+            buffer = grown;
         }
     }
 }

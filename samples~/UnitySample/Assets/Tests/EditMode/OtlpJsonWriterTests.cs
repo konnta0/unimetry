@@ -137,10 +137,10 @@ namespace Unimetry.Tests
         [Test]
         public void JsonEscaper_EscapesControlCharacters()
         {
-            var builder = new System.Text.StringBuilder();
-            JsonEscaper.AppendEscaped(builder, "line1\nline2\t\"quoted\"");
+            using var builder = new JsonText(64);
+            JsonEscaper.AppendEscaped(builder, "line1\nline2\t\"quoted\"\u0001");
 
-            Assert.AreEqual("line1\\nline2\\t\\\"quoted\\\"", builder.ToString());
+            Assert.AreEqual("line1\\nline2\\t\\\"quoted\\\"\\u0001", builder.ToPayload());
         }
 
         private static UnimetryOptions CreateOptions()

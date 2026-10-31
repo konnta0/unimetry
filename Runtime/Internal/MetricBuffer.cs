@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Unimetry.Internal
 {
@@ -54,8 +53,12 @@ namespace Unimetry.Internal
         private readonly object gate = new object();
         private readonly Dictionary<string, InstrumentDefinition> definitions =
             new Dictionary<string, InstrumentDefinition>(StringComparer.Ordinal);
-        private readonly Dictionary<string, Instrument> instruments =
-            new Dictionary<string, Instrument>(StringComparer.Ordinal);
+        private readonly Dictionary<string, SeriesBucket> seriesByName =
+            new Dictionary<string, SeriesBucket>(StringComparer.Ordinal);
+
+        // Filled under gate. Existing series are compared in place so a repeated record does not allocate.
+        private readonly EventTag[] preparedAttributes = new EventTag[MaxAttributes];
+        private int seriesCount;
         private long pendingStartUnixNano;
 
         public MetricBuffer(long startTimeUnixNano)
@@ -167,23 +170,31 @@ namespace Unimetry.Internal
                     Metrics = new List<MetricSnapshot>(),
                 };
 
-                foreach (var pair in instruments)
+                foreach (var pair in seriesByName)
                 {
-                    var instrument = pair.Value;
-                    if (instrument.Kind == MetricKind.Histogram)
+                    var bucket = pair.Value;
+                    for (var index = 0; index < bucket.Count; index++)
                     {
-                        CollectHistogram(instrument, batch.Metrics);
-                    }
-                    else if (instrument.HasValue)
-                    {
-                        batch.Metrics.Add(CreateSnapshot(instrument));
-                        instrument.Sum = 0d;
-                        instrument.HasValue = false;
+                        CollectInstrument(bucket.At(index), batch.Metrics);
                     }
                 }
 
                 pendingStartUnixNano = timeUnixNano;
                 return batch;
+            }
+        }
+
+        private static void CollectInstrument(Instrument instrument, List<MetricSnapshot> metrics)
+        {
+            if (instrument.Kind == MetricKind.Histogram)
+            {
+                CollectHistogram(instrument, metrics);
+            }
+            else if (instrument.HasValue)
+            {
+                metrics.Add(CreateSnapshot(instrument));
+                instrument.Sum = 0d;
+                instrument.HasValue = false;
             }
         }
 
@@ -327,8 +338,8 @@ namespace Unimetry.Internal
 
         private Instrument GetOrCreate(string name, string unit, MetricKind kind, MetricAttribute[] sourceAttributes)
         {
-            PrepareAttributes(sourceAttributes, out var attributes, out var attributeCount);
-            return GetOrCreatePrepared(name, unit, kind, attributes, attributeCount);
+            var attributeCount = PrepareAttributes(sourceAttributes);
+            return GetOrCreatePrepared(name, unit, kind, preparedAttributes, attributeCount);
         }
 
         private Instrument GetOrCreatePrepared(
@@ -347,13 +358,23 @@ namespace Unimetry.Internal
                 }
             }
 
-            var seriesKey = BuildSeriesKey(name, attributes, attributeCount);
-            if (instruments.TryGetValue(seriesKey, out var existing))
+            if (!seriesByName.TryGetValue(name, out var bucket))
             {
-                return existing;
+                bucket = null;
+            }
+            else
+            {
+                for (var index = 0; index < bucket.Count; index++)
+                {
+                    var existing = bucket.At(index);
+                    if (SameAttributes(existing, attributes, attributeCount))
+                    {
+                        return existing;
+                    }
+                }
             }
 
-            if (instruments.Count >= MaxInstruments)
+            if (seriesCount >= MaxInstruments)
             {
                 // Keep known series active and drop measurements that would create
                 // a new series after the global cardinality limit is reached.
@@ -370,26 +391,31 @@ namespace Unimetry.Internal
                 Kind = kind,
                 Name = name,
                 Unit = unit,
-                Attributes = attributes,
+                Attributes = CopyAttributes(attributes, attributeCount),
                 AttributeCount = attributeCount,
                 BucketCounts = kind == MetricKind.Histogram
                     ? new long[DefaultHistogramBounds.Length + 1]
                     : null,
             };
-            instruments.Add(seriesKey, created);
+            if (bucket == null)
+            {
+                bucket = new SeriesBucket();
+                seriesByName.Add(name, bucket);
+            }
+
+            bucket.Add(created);
+            seriesCount++;
             return created;
         }
 
-        private static void PrepareAttributes(MetricAttribute[] source, out EventTag[] attributes, out int count)
+        private int PrepareAttributes(MetricAttribute[] source)
         {
-            attributes = null;
-            count = 0;
             if (source == null || source.Length == 0)
             {
-                return;
+                return 0;
             }
 
-            var prepared = new EventTag[MaxAttributes];
+            var count = 0;
             for (var sourceIndex = 0; sourceIndex < source.Length; sourceIndex++)
             {
                 var tag = source[sourceIndex].Tag;
@@ -401,7 +427,7 @@ namespace Unimetry.Internal
                 var existing = -1;
                 for (var index = 0; index < count; index++)
                 {
-                    if (string.Equals(prepared[index].Key, tag.Key, StringComparison.Ordinal))
+                    if (string.Equals(preparedAttributes[index].Key, tag.Key, StringComparison.Ordinal))
                     {
                         existing = index;
                         break;
@@ -410,21 +436,73 @@ namespace Unimetry.Internal
 
                 if (existing >= 0)
                 {
-                    prepared[existing] = tag;
+                    preparedAttributes[existing] = tag;
                 }
-                else if (count < prepared.Length)
+                else if (count < preparedAttributes.Length)
                 {
-                    prepared[count++] = tag;
+                    preparedAttributes[count++] = tag;
                 }
             }
 
-            if (count == 0)
+            for (var left = 1; left < count; left++)
             {
-                return;
+                var current = preparedAttributes[left];
+                var right = left;
+                while (right > 0 && string.CompareOrdinal(preparedAttributes[right - 1].Key, current.Key) > 0)
+                {
+                    preparedAttributes[right] = preparedAttributes[right - 1];
+                    right--;
+                }
+
+                preparedAttributes[right] = current;
             }
 
-            Array.Sort(prepared, 0, count, EventTagComparer.Instance);
-            attributes = prepared;
+            return count;
+        }
+
+        private static bool SameAttributes(Instrument instrument, EventTag[] attributes, int count)
+        {
+            if (instrument.AttributeCount != count)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < count; index++)
+            {
+                var existing = instrument.Attributes[index];
+                var candidate = attributes[index];
+                if (existing.Kind != candidate.Kind ||
+                    !string.Equals(existing.Key, candidate.Key, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                if (existing.Kind == EventTagKind.String)
+                {
+                    if (!string.Equals(existing.Text, candidate.Text, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+                }
+                else if (existing.Bits != candidate.Bits)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static EventTag[] CopyAttributes(EventTag[] source, int count)
+        {
+            if (count <= 0 || source == null)
+            {
+                return null;
+            }
+
+            var copy = new EventTag[count];
+            Array.Copy(source, copy, count);
+            return copy;
         }
 
         private static bool TryPrepareAttribute(ref EventTag tag)
@@ -462,28 +540,6 @@ namespace Unimetry.Internal
             }
 
             return true;
-        }
-
-        private static string BuildSeriesKey(string name, EventTag[] attributes, int count)
-        {
-            var builder = new StringBuilder(name.Length + count * 24);
-            builder.Append(count).Append('|').Append(name.Length).Append(':').Append(name);
-            for (var index = 0; index < count; index++)
-            {
-                var tag = attributes[index];
-                builder.Append('|').Append(tag.Key.Length).Append(':').Append(tag.Key);
-                builder.Append(':').Append((int)tag.Kind).Append(':');
-                if (tag.Kind == EventTagKind.String)
-                {
-                    builder.Append(tag.Text.Length).Append(':').Append(tag.Text);
-                }
-                else
-                {
-                    builder.Append(tag.Bits);
-                }
-            }
-
-            return builder.ToString();
         }
 
         private static bool TryPrepareIdentity(ref string name, ref string unit)
@@ -529,13 +585,29 @@ namespace Unimetry.Internal
             public int AttributeCount;
         }
 
-        private sealed class EventTagComparer : IComparer<EventTag>
+        private sealed class SeriesBucket
         {
-            public static readonly EventTagComparer Instance = new EventTagComparer();
+            private Instrument[] items = new Instrument[1];
+            private int count;
 
-            public int Compare(EventTag left, EventTag right)
+            public int Count => count;
+
+            public Instrument At(int index)
             {
-                return string.CompareOrdinal(left.Key, right.Key);
+                return items[index];
+            }
+
+            public void Add(Instrument instrument)
+            {
+                if (count == items.Length)
+                {
+                    var grown = new Instrument[items.Length * 2];
+                    Array.Copy(items, grown, items.Length);
+                    items = grown;
+                }
+
+                items[count] = instrument;
+                count++;
             }
         }
     }
