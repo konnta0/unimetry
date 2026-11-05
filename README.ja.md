@@ -130,7 +130,16 @@ using (var handle = UnimetryEvent.Start("match.load"))
 }
 
 UnimetryEvent.Write("checkpoint.reached");
+UnimetryEvent.Write("cache.evicted", UnimetrySeverity.Warn);
+
+using (var scope = UnimetryEvent.Begin("master.delivery.failed"))
+{
+    scope.SetSeverity(UnimetrySeverity.Error);
+    scope.SetTag("reason", reason);
+}
 ```
+
+Event は `SetSeverity` か `Write` の重大度を指定するまで `Info` です。`RecordException` した Event は `Error` 以上のままなので、その後の `SetSeverity(Info)` では隠せません。`UnimetrySeverity` に無い値は無視します。
 
 `SetAttribute` は、その後のすべての Event（`Write` と `[Event]` を含む）にコピーされる属性を保存します。ログイン後に一度設定します。同じキーの明示的なタグがあるイベントでは、そのイベントの値が優先されます。共通属性は最大 8 個です。文字列の `null` はそのキーを外します。ログアウト時は `ClearAttributes` でまとめて外します。
 

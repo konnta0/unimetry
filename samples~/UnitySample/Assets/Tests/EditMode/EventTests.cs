@@ -36,11 +36,104 @@ namespace Unimetry.Tests
             using (var scope = UnimetryEvent.Begin("disabled"))
             {
                 scope.SetTag("ignored", 1);
+                scope.SetSeverity(UnimetrySeverity.Error);
             }
 
             UnimetryEvent.Write("disabled.point");
+            UnimetryEvent.Write("disabled.point.warn", UnimetrySeverity.Warn);
             Assert.IsFalse(UnimetryEvent.IsEnabled);
             Assert.AreEqual(0, Copy().Length);
+        }
+
+        [Test]
+        public void SetSeverity_RecordsWarnAndErrorWithoutAnException()
+        {
+            var observed = new List<UnimetrySeverity>();
+            Initialize(writer: (in UnimetryLogEntry entry) => observed.Add(entry.Severity));
+
+            using (var scope = UnimetryEvent.Begin("master.delivery.failed"))
+            {
+                scope.SetSeverity(UnimetrySeverity.Error);
+                scope.SetTag("reason", "timeout");
+            }
+
+            using (var handle = UnimetryEvent.Start("direct.debug"))
+            {
+                handle.SetSeverity(UnimetrySeverity.Debug);
+            }
+
+            UnimetryEvent.Write("cache.evicted", UnimetrySeverity.Warn);
+            using (UnimetryEvent.Begin("pooled.after.error"))
+            {
+            }
+
+            var records = Copy();
+            Assert.AreEqual(4, records.Length);
+            Assert.AreEqual((int)UnimetrySeverity.Error, records[0].SeverityNumber);
+            Assert.IsNull(records[0].ExceptionType);
+            Assert.AreEqual("timeout", records[0].Tags[0].Text);
+            Assert.AreEqual((int)UnimetrySeverity.Debug, records[1].SeverityNumber);
+            Assert.AreEqual((int)UnimetrySeverity.Warn, records[2].SeverityNumber);
+            Assert.AreEqual((int)UnimetrySeverity.Info, records[3].SeverityNumber);
+            CollectionAssert.AreEqual(
+                new[]
+                {
+                    UnimetrySeverity.Error,
+                    UnimetrySeverity.Debug,
+                    UnimetrySeverity.Warn,
+                    UnimetrySeverity.Info,
+                },
+                observed);
+
+            var payload = OtlpJsonWriter.BuildLogsPayload(new List<PendingExport>(), records, records.Length, new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                ServiceName = "unimetry-event-test",
+            });
+            StringAssert.Contains("\"severityText\":\"ERROR\"", payload);
+            StringAssert.Contains("\"severityText\":\"WARN\"", payload);
+            StringAssert.Contains("\"severityText\":\"DEBUG\"", payload);
+            StringAssert.DoesNotContain("exception.type", payload);
+        }
+
+        [Test]
+        public void SetSeverity_CannotHideARecordedException()
+        {
+            Initialize();
+            using (var scope = UnimetryEvent.Begin("hidden"))
+            {
+                scope.SetSeverity(UnimetrySeverity.Warn);
+                scope.RecordException(new InvalidOperationException("boom"));
+                scope.SetSeverity(UnimetrySeverity.Info);
+            }
+
+            using (var scope = UnimetryEvent.Begin("fatal"))
+            {
+                scope.RecordException(new InvalidOperationException("boom"));
+                scope.SetSeverity(UnimetrySeverity.Fatal);
+            }
+
+            var records = Copy();
+            Assert.AreEqual((int)UnimetrySeverity.Error, records[0].SeverityNumber);
+            Assert.AreEqual("System.InvalidOperationException", records[0].ExceptionType);
+            Assert.AreEqual((int)UnimetrySeverity.Fatal, records[1].SeverityNumber);
+        }
+
+        [Test]
+        public void SetSeverity_IgnoresValuesOutsideTheDefinedSet()
+        {
+            Initialize();
+            using (var scope = UnimetryEvent.Begin("unknown.scope"))
+            {
+                scope.SetSeverity(UnimetrySeverity.Error);
+                scope.SetSeverity((UnimetrySeverity)2);
+            }
+
+            UnimetryEvent.Write("unknown.point", (UnimetrySeverity)4);
+
+            var records = Copy();
+            Assert.AreEqual((int)UnimetrySeverity.Error, records[0].SeverityNumber);
+            Assert.AreEqual((int)UnimetrySeverity.Info, records[1].SeverityNumber);
         }
 
         [Test]

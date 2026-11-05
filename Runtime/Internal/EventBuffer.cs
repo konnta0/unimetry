@@ -94,6 +94,11 @@ namespace Unimetry.Internal
 
         public void WritePoint(string name, long unixNano)
         {
+            WritePoint(name, unixNano, UnimetrySeverity.Info);
+        }
+
+        public void WritePoint(string name, long unixNano, UnimetrySeverity severity)
+        {
             lock (gate)
             {
                 if (count >= records.Length)
@@ -107,7 +112,7 @@ namespace Unimetry.Internal
                 slot.Name = name;
                 slot.StartUnixNano = unixNano;
                 slot.EndUnixNano = unixNano;
-                slot.SeverityNumber = (int)UnimetrySeverity.Info;
+                slot.SeverityNumber = (int)severity;
                 EventAttributes.Apply(ref slot, explicitCount: 0);
                 slot.Resource = resourceState?.Capture();
                 tail++;
@@ -240,9 +245,7 @@ namespace Unimetry.Internal
             slot.Name = handle.Name;
             slot.StartUnixNano = handle.StartUnixNano;
             slot.EndUnixNano = endUnixNano;
-            slot.SeverityNumber = handle.ExceptionType == null
-                ? (int)UnimetrySeverity.Info
-                : (int)UnimetrySeverity.Error;
+            slot.SeverityNumber = (int)handle.ResolvedSeverity();
             slot.ExceptionType = handle.ExceptionType;
             slot.ExceptionMessage = handle.ExceptionMessage;
             slot.ExceptionStack = handle.ExceptionStack;

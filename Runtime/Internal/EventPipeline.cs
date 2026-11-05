@@ -26,7 +26,7 @@ namespace Unimetry.Internal
                 return;
             }
 
-            var severity = handle.ExceptionType == null ? UnimetrySeverity.Info : UnimetrySeverity.Error;
+            var severity = handle.ResolvedSeverity();
             var entry = new UnimetryLogEntry(
                 UnimetryLogKind.Event,
                 handle.Name,
@@ -37,12 +37,12 @@ namespace Unimetry.Internal
             LogDispatch.Emit(logWriter, in entry);
         }
 
-        public static void PublishPoint(string name, long unixNano)
+        public static void PublishPoint(string name, long unixNano, UnimetrySeverity severity)
         {
             var activeBuffer = buffer;
             if (activeBuffer != null)
             {
-                activeBuffer.WritePoint(name, unixNano);
+                activeBuffer.WritePoint(name, unixNano, severity);
             }
 
             var logWriter = writer;
@@ -55,7 +55,7 @@ namespace Unimetry.Internal
                 UnimetryLogKind.Event,
                 name,
                 name,
-                UnimetrySeverity.Info,
+                severity,
                 unixNano,
                 unixNano);
             LogDispatch.Emit(logWriter, in entry);

@@ -130,7 +130,16 @@ using (var handle = UnimetryEvent.Start("match.load"))
 }
 
 UnimetryEvent.Write("checkpoint.reached");
+UnimetryEvent.Write("cache.evicted", UnimetrySeverity.Warn);
+
+using (var scope = UnimetryEvent.Begin("master.delivery.failed"))
+{
+    scope.SetSeverity(UnimetrySeverity.Error);
+    scope.SetTag("reason", reason);
+}
 ```
+
+An event is `Info` until `SetSeverity` or the `Write` overload says otherwise. `RecordException` keeps the event at `Error` or higher, so a later `SetSeverity(Info)` cannot hide it. A value outside `UnimetrySeverity` is ignored.
 
 `SetAttribute` stores attributes that are copied onto every later event, including `Write` and `[Event]`. Set them once after login. An explicit tag with the same key replaces the common value for that event. At most eight common attributes are kept. A `null` string removes the key. `ClearAttributes` removes all of them, for example on logout.
 

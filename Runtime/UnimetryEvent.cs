@@ -69,7 +69,29 @@ namespace Unimetry
                 return;
             }
 
-            Internal.EventPipeline.PublishPoint(name, Internal.EventClock.UnixNano());
+            Internal.EventPipeline.PublishPoint(name, Internal.EventClock.UnixNano(), UnimetrySeverity.Info);
+        }
+
+        /// <summary>
+        /// Records a point event at <paramref name="severity"/>.
+        /// A value outside <see cref="UnimetrySeverity"/> is recorded as <see cref="UnimetrySeverity.Info"/>.
+        /// </summary>
+        /// <param name="name">Event name stored in the OTLP <c>eventName</c> field.</param>
+        /// <param name="severity">Severity stored in the OTLP <c>severityNumber</c> field.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Write(string name, UnimetrySeverity severity)
+        {
+            if (EventEnabled == 0 || string.IsNullOrEmpty(name))
+            {
+                return;
+            }
+
+            if (!UnimetrySeverities.IsDefined(severity))
+            {
+                severity = UnimetrySeverity.Info;
+            }
+
+            Internal.EventPipeline.PublishPoint(name, Internal.EventClock.UnixNano(), severity);
         }
 
         /// <summary>

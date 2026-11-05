@@ -23,4 +23,23 @@ namespace Unimetry
         /// <summary>Fatal severity (21).</summary>
         Fatal = 21,
     }
+
+    internal static class UnimetrySeverities
+    {
+        internal static bool IsDefined(UnimetrySeverity severity)
+        {
+            switch (severity)
+            {
+                case UnimetrySeverity.Trace:
+                case UnimetrySeverity.Debug:
+                case UnimetrySeverity.Info:
+                case UnimetrySeverity.Warn:
+                case UnimetrySeverity.Error:
+                case UnimetrySeverity.Fatal:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
 }

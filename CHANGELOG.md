@@ -4,6 +4,10 @@ Notable changes to Unimetry are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `EventScope.SetSeverity`, `EventHandle.SetSeverity`, and `UnimetryEvent.Write(name, severity)` set an event's OpenTelemetry severity without recording an exception. Omitting them still records `Info`. A recorded exception stays at `Error` or higher.
+
 ## [0.8.1] - 2026-11-01
 
 ### Changed

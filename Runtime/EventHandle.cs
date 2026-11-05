@@ -20,6 +20,7 @@ namespace Unimetry
         internal string ExceptionMessage;
         internal string ExceptionStack;
         internal bool ExceptionEscaped;
+        internal int ExplicitSeverity;
         internal ResourceSnapshot Resource;
         internal EventTag[] Tags;
         internal bool Active;
@@ -110,6 +111,27 @@ namespace Unimetry
         }
 
         /// <summary>
+        /// Sets the OpenTelemetry severity exported for this event.
+        /// Values outside <see cref="UnimetrySeverity"/> are ignored.
+        /// After <see cref="RecordException"/>, a severity below <see cref="UnimetrySeverity.Error"/> is ignored.
+        /// </summary>
+        /// <param name="severity">Severity stored in the OTLP <c>severityNumber</c> field.</param>
+        public void SetSeverity(UnimetrySeverity severity)
+        {
+            if (!Active || !UnimetrySeverities.IsDefined(severity))
+            {
+                return;
+            }
+
+            if (ExceptionType != null && severity < UnimetrySeverity.Error)
+            {
+                return;
+            }
+
+            ExplicitSeverity = (int)severity;
+        }
+
+        /// <summary>
         /// Marks the event as an error and stores exception semantic-convention fields.
         /// </summary>
         /// <param name="exception">Exception leaving the instrumented region.</param>
@@ -162,8 +184,20 @@ namespace Unimetry
             ExceptionMessage = null;
             ExceptionStack = null;
             ExceptionEscaped = false;
+            ExplicitSeverity = 0;
             Resource = EventPipeline.CaptureResource();
             Active = true;
+        }
+
+        internal UnimetrySeverity ResolvedSeverity()
+        {
+            var severity = ExplicitSeverity == 0 ? UnimetrySeverity.Info : (UnimetrySeverity)ExplicitSeverity;
+            if (ExceptionType != null && severity < UnimetrySeverity.Error)
+            {
+                return UnimetrySeverity.Error;
+            }
+
+            return severity;
         }
 
         internal void Clear()
@@ -177,6 +211,7 @@ namespace Unimetry
             ExceptionMessage = null;
             ExceptionStack = null;
             ExceptionEscaped = false;
+            ExplicitSeverity = 0;
             Resource = null;
             Active = false;
             for (var index = 0; index < Tags.Length; index++)
@@ -296,6 +331,20 @@ namespace Unimetry
             if (handle != null)
             {
                 handle.SetTag(key, value);
+            }
+        }
+
+        /// <summary>
+        /// Sets the OpenTelemetry severity when this scope is active.
+        /// Values outside <see cref="UnimetrySeverity"/> are ignored.
+        /// After <see cref="RecordException"/>, a severity below <see cref="UnimetrySeverity.Error"/> is ignored.
+        /// </summary>
+        /// <param name="severity">Severity stored in the OTLP <c>severityNumber</c> field.</param>
+        public void SetSeverity(UnimetrySeverity severity)
+        {
+            if (handle != null)
+            {
+                handle.SetSeverity(severity);
             }
         }
 
