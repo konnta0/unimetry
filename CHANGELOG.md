@@ -4,6 +4,8 @@ Notable changes to Unimetry are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-06
+
 ### Added
 
 - `EventScope.SetSeverity`, `EventHandle.SetSeverity`, and `UnimetryEvent.Write(name, severity)` set an event's OpenTelemetry severity without recording an exception. Omitting them still records `Info`. A recorded exception stays at `Error` or higher.
@@ -20,6 +22,7 @@ Notable changes to Unimetry are documented in this file.
 
 - Added `UnimetryOptions.CaptureBuiltInMetrics` and the matching `UnimetrySettings` field. It defaults to enabled; disabling it stops and omits the built-in FPS, managed memory, and startup gauges without disabling application metrics.
 
-[Unreleased]: https://github.com/konnta0/unimetry/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/konnta0/unimetry/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/konnta0/unimetry/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/konnta0/unimetry/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/konnta0/unimetry/compare/v0.7.0...v0.8.0

@@ -105,7 +105,7 @@ namespace Unimetry.Internal
                 var resource = resources[resourceIndex];
                 builder.Append("{\"resource\":{\"attributes\":");
                 AppendResourceAttributes(builder, resource);
-                builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.8.1\"},\"logRecords\":[");
+                builder.Append("},\"scopeLogs\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.9.0\"},\"logRecords\":[");
                 var writtenLogs = 0;
                 for (var index = 0; index < errorCount; index++)
                 {
@@ -170,7 +170,7 @@ namespace Unimetry.Internal
                 var resource = resources[resourceIndex];
                 builder.Append("{\"resource\":{\"attributes\":");
                 AppendResourceAttributes(builder, resource);
-                builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.8.1\"},\"spans\":[");
+                builder.Append("},\"scopeSpans\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.9.0\"},\"spans\":[");
                 var first = true;
                 for (var index = 0; index < items.Count; index++)
                 {
@@ -427,7 +427,7 @@ namespace Unimetry.Internal
             using var builder = new JsonText(1024 + metricCount * 768);
             builder.Append("{\"resourceMetrics\":[{\"resource\":{\"attributes\":");
             AppendResourceAttributes(builder, resource ?? ResourceSnapshot.FromOptions(options));
-            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.8.1\"},\"metrics\":[");
+            builder.Append("},\"scopeMetrics\":[{\"scope\":{\"name\":\"Unimetry\",\"version\":\"0.9.0\"},\"metrics\":[");
             var written = 0;
             if (options.CaptureBuiltInMetrics &&
                 !double.IsNaN(framesPerSecond) &&
