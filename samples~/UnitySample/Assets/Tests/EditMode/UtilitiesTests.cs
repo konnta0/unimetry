@@ -24,6 +24,57 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void ExportFingerprint_HashesTheSanitizedTextWhenTheInputFingerprintIsCopied()
+        {
+            const string before = "pre-sanitizer-hash";
+            var resolved = ExportFingerprint.Resolve(
+                before,
+                before,
+                "System.InvalidOperationException",
+                "open ~/Library/save",
+                "at Game.Load()\n~/Library/save:1");
+
+            Assert.AreEqual(
+                IdGenerator.CreateFingerprint(
+                    "System.InvalidOperationException",
+                    "open ~/Library/save",
+                    "at Game.Load()\n~/Library/save:1"),
+                resolved);
+            Assert.AreNotEqual(before, resolved);
+        }
+
+        [Test]
+        public void ExportFingerprint_KeepsAFingerprintTheSanitizerChose()
+        {
+            var resolved = ExportFingerprint.Resolve(
+                "pre-sanitizer-hash",
+                "issue-42",
+                "System.InvalidOperationException",
+                "open ~/Library/save",
+                "at Game.Load()");
+
+            Assert.AreEqual("issue-42", resolved);
+        }
+
+        [Test]
+        public void ExportFingerprint_HashesWhenTheSanitizerClearsTheFingerprint()
+        {
+            var resolved = ExportFingerprint.Resolve(
+                "pre-sanitizer-hash",
+                string.Empty,
+                "System.InvalidOperationException",
+                "open ~/Library/save",
+                string.Empty);
+
+            Assert.AreEqual(
+                IdGenerator.CreateFingerprint(
+                    "System.InvalidOperationException",
+                    "open ~/Library/save",
+                    string.Empty),
+                resolved);
+        }
+
+        [Test]
         public void CreateTraceAndSpanIds_HaveExpectedLength()
         {
             var traceId = IdGenerator.CreateTraceId();

@@ -167,6 +167,16 @@ namespace Unimetry.Internal
                 unixNano);
             EventPipeline.EmitLog(in entry);
             var export = PendingExport.FromCapturedError(sanitized, options.ExportErrorSpans);
+            if (!ReferenceEquals(sanitized, capturedError))
+            {
+                export.Fingerprint = ExportFingerprint.Resolve(
+                    capturedError.Fingerprint,
+                    sanitized.Fingerprint,
+                    export.ExceptionType,
+                    export.Message,
+                    export.StackTrace);
+            }
+
             export.ParentSpanId = parentSpanId ?? string.Empty;
             export.Baggage = TraceContext.FormatBaggage();
             export.Resource = resourceState.Capture();

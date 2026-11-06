@@ -162,7 +162,7 @@ resource 属性は error、span、Event の記録時にスナップショット�
 UnimetryClient.SetResourceAttribute("app.user_id", userId); // null で削除
 ```
 
-`Sanitizer` は Event に付いた例外にも適用されます。`ErrorFilter` を使うと、自動捕捉の経路を永続キューへ入る前に停止できます。
+`Sanitizer` は Event に付いた例外にも適用されます。送る `unimetry.fingerprint` は、Sanitizer 適用後の例外種別、メッセージ、スタックトレースから計算します。プロセス内の重複除去は適用前の値のままです。Sanitizer が受け取った値と違う、空でない Fingerprint を返したときだけ、その値を送ります。`ErrorFilter` を使うと、自動捕捉の経路を永続キューへ入る前に停止できます。
 
 ```csharp
 options.ErrorFilter = error => error.Source != CapturedErrorSource.UnityLog;

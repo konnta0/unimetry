@@ -61,6 +61,54 @@ namespace Unimetry.Internal
         }
     }
 
+    /// <summary>
+    /// Selects the <c>unimetry.fingerprint</c> stored on an exported error.
+    /// </summary>
+    /// <remarks>
+    /// Sanitizers typically copy <see cref="CapturedError.Fingerprint"/> while removing
+    /// machine-specific paths from the message and stack. Treating every non-empty
+    /// fingerprint as final would keep that pre-redaction hash and split one exception
+    /// per machine. A returned fingerprint is therefore kept only when it is non-empty
+    /// and different from the value passed into the sanitizer. Otherwise the hash is
+    /// taken from the exception type, message, and stack trace that will be exported.
+    /// In-process duplicate suppression stays on the pre-sanitizer hash: paths do not
+    /// change during one process, and a second hash there would merge distinct failures
+    /// that only look the same after redaction.
+    /// </remarks>
+    internal static class ExportFingerprint
+    {
+        /// <summary>
+        /// Returns the fingerprint to export for one sanitized error.
+        /// </summary>
+        /// <param name="fingerprintBefore">Fingerprint passed into the sanitizer.</param>
+        /// <param name="fingerprintAfter">Fingerprint returned by the sanitizer.</param>
+        /// <param name="exceptionType">Exception type that will be exported.</param>
+        /// <param name="message">Message that will be exported.</param>
+        /// <param name="stackTrace">Stack trace that will be exported.</param>
+        /// <returns>
+        /// <paramref name="fingerprintAfter"/> when the sanitizer chose a new non-empty value;
+        /// otherwise a hash of the exported exception text.
+        /// </returns>
+        public static string Resolve(
+            string fingerprintBefore,
+            string fingerprintAfter,
+            string exceptionType,
+            string message,
+            string stackTrace)
+        {
+            if (!string.IsNullOrEmpty(fingerprintAfter) &&
+                !string.Equals(fingerprintAfter, fingerprintBefore ?? string.Empty, StringComparison.Ordinal))
+            {
+                return fingerprintAfter;
+            }
+
+            return IdGenerator.CreateFingerprint(
+                exceptionType ?? string.Empty,
+                message ?? string.Empty,
+                stackTrace ?? string.Empty);
+        }
+    }
+
     internal static class StackTraceFormatter
     {
         public static string Format(Exception exception, int maxFrames)

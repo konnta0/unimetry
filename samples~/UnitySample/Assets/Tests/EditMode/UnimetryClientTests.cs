@@ -227,6 +227,60 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void Report_ExportsFingerprintFromSanitizedMessageAndStack()
+        {
+            string rawFingerprint = null;
+            var options = CreateOptions(captureNativeCrashes: false);
+            options.Sanitizer = captured =>
+            {
+                rawFingerprint ??= captured.Fingerprint;
+                return ReplaceFingerprint(
+                    captured,
+                    captured.Message.Replace("/Users/alice", "~").Replace("/Users/bob", "~"),
+                    "at Game.Load()\n~/Library/save:1",
+                    captured.Fingerprint);
+            };
+            UnimetryClient.Initialize(options);
+
+            var exception = new InvalidOperationException("boom");
+            UnimetryClient.Report(exception, "open /Users/alice/Library/save");
+            UnimetryClient.Report(exception, "open /Users/alice/Library/save");
+            UnimetryClient.Report(exception, "open /Users/bob/Library/save");
+
+            var batch = new PersistentQueue(32).DequeueBatch(32);
+            Assert.AreEqual(2, batch.Count);
+            var expected = IdGenerator.CreateFingerprint(
+                "System.InvalidOperationException",
+                "open ~/Library/save",
+                "at Game.Load()\n~/Library/save:1");
+            Assert.AreEqual(expected, batch[0].Fingerprint);
+            Assert.AreEqual(expected, batch[1].Fingerprint);
+            Assert.AreNotEqual(rawFingerprint, expected);
+            Assert.AreEqual("open ~/Library/save", batch[0].Message);
+            Assert.AreEqual("open ~/Library/save", batch[1].Message);
+            Assert.AreEqual("at Game.Load()\n~/Library/save:1", batch[0].StackTrace);
+        }
+
+        [Test]
+        public void Report_KeepsAFingerprintChosenByTheSanitizer()
+        {
+            var options = CreateOptions(captureNativeCrashes: false);
+            options.Sanitizer = captured => ReplaceFingerprint(
+                captured,
+                "redacted",
+                captured.StackTrace,
+                "issue-42");
+            UnimetryClient.Initialize(options);
+
+            UnimetryClient.Report(new InvalidOperationException("secret /Users/alice/save"));
+
+            var batch = new PersistentQueue(32).DequeueBatch(32);
+            Assert.AreEqual(1, batch.Count);
+            Assert.AreEqual("issue-42", batch[0].Fingerprint);
+            Assert.AreEqual("redacted", batch[0].Message);
+        }
+
+        [Test]
         public void ErrorFilter_CanDisableUnityLogCaptureOnly()
         {
             var options = CreateOptions(captureNativeCrashes: false);
@@ -281,6 +335,26 @@ namespace Unimetry.Tests
         private static string CrashDirectory()
         {
             return Path.Combine(Application.persistentDataPath, "unimetry", "crashes");
+        }
+
+        private static CapturedError ReplaceFingerprint(
+            CapturedError captured,
+            string message,
+            string stackTrace,
+            string fingerprint)
+        {
+            return new CapturedError(
+                message,
+                captured.Severity,
+                captured.Source,
+                captured.ExceptionType,
+                stackTrace,
+                captured.ThreadName,
+                captured.IsTerminating,
+                fingerprint,
+                captured.TraceId,
+                captured.SpanId,
+                captured.CapturedAtUtc);
         }
 
         private static string FindResource(PendingExport export, string key)

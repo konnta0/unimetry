@@ -112,7 +112,12 @@ namespace Unimetry.Internal
             var sanitizedMessage = string.IsNullOrEmpty(sanitized.Message) ? message : sanitized.Message;
             var stack = sanitized.StackTrace ?? string.Empty;
             var threadName = sanitized.ThreadName ?? string.Empty;
-            var fingerprint = IdGenerator.CreateFingerprint(exceptionType, sanitizedMessage, stack);
+            var fingerprint = ExportFingerprint.Resolve(
+                preliminary.Fingerprint,
+                sanitized.Fingerprint,
+                exceptionType,
+                sanitizedMessage,
+                stack);
             var minidumpFile = artifact.minidumpFile ?? string.Empty;
             var minidumpBytes = artifact.minidumpBytes;
             if (!CrashArtifactStore.IsSafeDumpName(artifact.id, minidumpFile))

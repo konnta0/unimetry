@@ -269,6 +269,68 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void Ingest_HashesFingerprintFromSanitizedTextUnlessTheSanitizerChoosesOne()
+        {
+            var artifact = new CrashArtifact
+            {
+                id = new string('c', 32),
+                capturedAtUnixMs = 1_700_000_000_000L,
+                exceptionType = "ACCESS_VIOLATION",
+                message = "fault at /Users/alice/game",
+                managedStack = "at Game.Tick()\n/Users/alice/game/Game.cs:10",
+            };
+            var redacted = CrashIngest.ToPendingExport(artifact, new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                Sanitizer = captured => new CapturedError(
+                    captured.Message.Replace("/Users/alice", "~"),
+                    captured.Severity,
+                    captured.Source,
+                    captured.ExceptionType,
+                    captured.StackTrace.Replace("/Users/alice", "~"),
+                    captured.ThreadName,
+                    captured.IsTerminating,
+                    captured.Fingerprint,
+                    captured.TraceId,
+                    captured.SpanId,
+                    captured.CapturedAtUtc),
+            });
+
+            Assert.AreEqual("fault at ~/game", redacted.Message);
+            Assert.AreEqual(
+                IdGenerator.CreateFingerprint(
+                    "ACCESS_VIOLATION",
+                    "fault at ~/game",
+                    "at Game.Tick()\n~/game/Game.cs:10"),
+                redacted.Fingerprint);
+            Assert.AreNotEqual(
+                IdGenerator.CreateFingerprint(
+                    "ACCESS_VIOLATION",
+                    "fault at /Users/alice/game",
+                    "at Game.Tick()\n/Users/alice/game/Game.cs:10"),
+                redacted.Fingerprint);
+
+            var chosen = CrashIngest.ToPendingExport(artifact, new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                Sanitizer = captured => new CapturedError(
+                    "redacted",
+                    captured.Severity,
+                    captured.Source,
+                    captured.ExceptionType,
+                    captured.StackTrace,
+                    captured.ThreadName,
+                    captured.IsTerminating,
+                    "issue-42",
+                    captured.TraceId,
+                    captured.SpanId,
+                    captured.CapturedAtUtc),
+            });
+
+            Assert.AreEqual("issue-42", chosen.Fingerprint);
+        }
+
+        [Test]
         public void CrashSignal_DescribesAccessViolation()
         {
             var text = CrashSignal.Describe(0xC0000005, 0x10, 2, 0, 0x20);

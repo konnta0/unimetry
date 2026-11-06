@@ -141,6 +141,7 @@ namespace Unimetry.Internal
             var spanId = IdGenerator.CreateSpanId();
             parentSpanId = string.Empty;
             TraceContext.ApplyToError(ref traceId, ref parentSpanId);
+            // Dedupe only. The exported fingerprint is hashed again after the sanitizer runs.
             var fingerprint = IdGenerator.CreateFingerprint(exceptionType, message, stackTrace);
 
             return new CapturedError(

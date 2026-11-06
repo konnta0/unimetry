@@ -4,6 +4,10 @@ Notable changes to Unimetry are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Exported `unimetry.fingerprint` is hashed from the sanitized exception type, message, and stack trace, including native crashes. In-process deduplication still uses the pre-sanitizer value. A sanitizer fingerprint is kept only when it is non-empty and different from the fingerprint it received, so copying the input fingerprint does not preserve a machine-specific hash.
+
 ## [0.9.0] - 2026-11-06
 
 ### Added

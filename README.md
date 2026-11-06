@@ -162,7 +162,7 @@ Resource attributes are snapshotted when each error, span, or event is recorded.
 UnimetryClient.SetResourceAttribute("app.user_id", userId); // null removes it
 ```
 
-`Sanitizer` also applies to exceptions attached to events. `ErrorFilter` can suppress automatic capture routes before they enter the persistent queue:
+`Sanitizer` also applies to exceptions attached to events. Exported `unimetry.fingerprint` is hashed from the sanitized exception type, message, and stack trace. In-process deduplication still uses the value from before redaction. A fingerprint returned by the sanitizer is sent only when it is non-empty and different from the one it received. `ErrorFilter` can suppress automatic capture routes before they enter the persistent queue:
 
 ```csharp
 options.ErrorFilter = error => error.Source != CapturedErrorSource.UnityLog;

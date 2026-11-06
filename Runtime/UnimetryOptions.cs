@@ -72,6 +72,9 @@ namespace Unimetry
 
         /// <summary>
         /// Optional callback that can redact or rewrite captured error payloads before export.
+        /// The exported <c>unimetry.fingerprint</c> is hashed from the sanitized exception type,
+        /// message, and stack trace. A fingerprint on the returned payload is kept only when it
+        /// is non-empty and different from the fingerprint passed in.
         /// </summary>
         public Func<CapturedError, CapturedError> Sanitizer { get; set; }
 
