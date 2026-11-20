@@ -4,6 +4,8 @@ Notable changes to Unimetry are documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-20
+
 ### Added
 
 - Added configurable `MaxInstruments` and `MaxAttributes` limits to `UnimetryOptions` and `UnimetrySettings`, retaining the previous defaults of 128 time series and four attributes per measurement.
@@ -37,7 +39,8 @@ Notable changes to Unimetry are documented in this file.
 
 - Added `UnimetryOptions.CaptureBuiltInMetrics` and the matching `UnimetrySettings` field. It defaults to enabled; disabling it stops and omits the built-in FPS, managed memory, and startup gauges without disabling application metrics.
 
-[Unreleased]: https://github.com/konnta0/unimetry/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/konnta0/unimetry/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/konnta0/unimetry/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/konnta0/unimetry/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/konnta0/unimetry/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/konnta0/unimetry/compare/v0.8.0...v0.8.1
