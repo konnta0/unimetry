@@ -4,6 +4,8 @@ Notable changes to Unimetry are documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-20
+
 ### Added
 
 - Added `CaptureMetricLimitCounters` to `UnimetryOptions` and `UnimetrySettings`. It defaults to enabled and independently controls the one-shot metric-limit counters without affecting the built-in Unity gauges or application metrics.
@@ -43,7 +45,8 @@ Notable changes to Unimetry are documented in this file.
 
 - Added `UnimetryOptions.CaptureBuiltInMetrics` and the matching `UnimetrySettings` field. It defaults to enabled; disabling it stops and omits the built-in FPS, managed memory, and startup gauges without disabling application metrics.
 
-[Unreleased]: https://github.com/konnta0/unimetry/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/konnta0/unimetry/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/konnta0/unimetry/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/konnta0/unimetry/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/konnta0/unimetry/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/konnta0/unimetry/compare/v0.8.1...v0.9.0
