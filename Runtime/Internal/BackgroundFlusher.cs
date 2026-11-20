@@ -228,7 +228,8 @@ namespace Unimetry.Internal
 
             var timeUnixNano = EventClock.UnixNano();
             var metricBatch = metricBuffer?.Collect(timeUnixNano);
-            if (!options.CaptureBuiltInMetrics && (metricBatch == null || metricBatch.IsEmpty))
+            if (!options.CaptureBuiltInMetrics &&
+                (metricBatch == null || !metricBatch.HasApplicationMetrics))
             {
                 return;
             }

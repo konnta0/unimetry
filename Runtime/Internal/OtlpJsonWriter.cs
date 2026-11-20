@@ -449,6 +449,29 @@ namespace Unimetry.Internal
                 AppendGauge(builder, "unity.startup.duration_s", startupSeconds, timeUnixNano, ref written);
             }
 
+            if (options.CaptureBuiltInMetrics && metricBatch != null)
+            {
+                if (metricBatch.InstrumentLimitReached)
+                {
+                    AppendInternalCounter(
+                        builder,
+                        MetricBuffer.InstrumentLimitMetricName,
+                        metricBatch.StartTimeUnixNano,
+                        metricBatch.TimeUnixNano,
+                        ref written);
+                }
+
+                if (metricBatch.AttributeLimitReached)
+                {
+                    AppendInternalCounter(
+                        builder,
+                        MetricBuffer.AttributeLimitMetricName,
+                        metricBatch.StartTimeUnixNano,
+                        metricBatch.TimeUnixNano,
+                        ref written);
+                }
+            }
+
             if (metricBatch?.Metrics != null)
             {
                 for (var index = 0; index < metricBatch.Metrics.Count; index++)
@@ -535,6 +558,26 @@ namespace Unimetry.Internal
             builder.Append("\",\"asDouble\":");
             builder.Append(value);
             builder.Append("}]}}");
+        }
+
+        private static void AppendInternalCounter(
+            JsonText builder,
+            string name,
+            long startTimeUnixNano,
+            long timeUnixNano,
+            ref int written)
+        {
+            if (written > 0)
+            {
+                builder.Append(',');
+            }
+
+            written++;
+            builder.Append("{\"name\":\"");
+            JsonEscaper.AppendEscaped(builder, name);
+            builder.Append("\",\"sum\":{\"aggregationTemporality\":1,\"isMonotonic\":true,\"dataPoints\":[{");
+            AppendMetricTimes(builder, startTimeUnixNano, timeUnixNano);
+            builder.Append(",\"asInt\":\"1\"}]}}");
         }
 
         private static void AppendSum(

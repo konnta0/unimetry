@@ -96,10 +96,22 @@ namespace Unimetry
         public bool CaptureMetrics { get; set; } = true;
 
         /// <summary>
-        /// When true, Unimetry collects and exports its built-in FPS, managed memory, and startup gauges.
+        /// When true, Unimetry collects and exports its built-in FPS, managed memory, and startup gauges,
+        /// plus one-shot metric-limit counters.
         /// Disable this to stop all built-in metric measurements without disabling application metrics.
         /// </summary>
         public bool CaptureBuiltInMetrics { get; set; } = true;
+
+        /// <summary>
+        /// Maximum number of application metric time series retained per initialization.
+        /// A metric name plus its canonical attribute set identifies one time series.
+        /// </summary>
+        public int MaxInstruments { get; set; } = 128;
+
+        /// <summary>
+        /// Maximum number of unique attributes retained for each application metric measurement.
+        /// </summary>
+        public int MaxAttributes { get; set; } = 4;
 
         /// <summary>
         /// Maximum number of completed events retained in the encrypted offline event queue.
@@ -192,6 +204,16 @@ namespace Unimetry
             if (MaxEventBuffer <= 0)
             {
                 throw new InvalidOperationException("MaxEventBuffer must be greater than zero.");
+            }
+
+            if (MaxInstruments <= 0)
+            {
+                throw new InvalidOperationException("MaxInstruments must be greater than zero.");
+            }
+
+            if (MaxAttributes <= 0)
+            {
+                throw new InvalidOperationException("MaxAttributes must be greater than zero.");
             }
 
             if (BreadcrumbCapacity <= 0 || BreadcrumbCapacity > 256)

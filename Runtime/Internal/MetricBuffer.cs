@@ -31,14 +31,19 @@ namespace Unimetry.Internal
         public long StartTimeUnixNano;
         public long TimeUnixNano;
         public List<MetricSnapshot> Metrics;
+        public bool InstrumentLimitReached;
+        public bool AttributeLimitReached;
 
-        public bool IsEmpty => Metrics == null || Metrics.Count == 0;
+        public bool HasApplicationMetrics => Metrics != null && Metrics.Count > 0;
+        public bool IsEmpty => !HasApplicationMetrics && !InstrumentLimitReached && !AttributeLimitReached;
     }
 
     internal sealed class MetricBuffer
     {
-        internal const int MaxInstruments = 128;
-        internal const int MaxAttributes = 4;
+        internal const int DefaultMaxInstruments = 128;
+        internal const int DefaultMaxAttributes = 4;
+        internal const string InstrumentLimitMetricName = "unimetry.metric.instrument_limit_reached";
+        internal const string AttributeLimitMetricName = "unimetry.metric.attribute_limit_reached";
         private const int MaxNameLength = 255;
         private const int MaxUnitLength = 63;
         private const int MaxAttributeKeyLength = 256;
@@ -57,12 +62,32 @@ namespace Unimetry.Internal
             new Dictionary<string, SeriesBucket>(StringComparer.Ordinal);
 
         // Filled under gate. Existing series are compared in place so a repeated record does not allocate.
-        private readonly EventTag[] preparedAttributes = new EventTag[MaxAttributes];
+        private readonly EventTag[] preparedAttributes;
+        private readonly int maxInstruments;
         private int seriesCount;
         private long pendingStartUnixNano;
+        private bool instrumentLimitReported;
+        private bool attributeLimitReported;
+        private bool instrumentLimitPending;
+        private bool attributeLimitPending;
 
-        public MetricBuffer(long startTimeUnixNano)
+        public MetricBuffer(
+            long startTimeUnixNano,
+            int maxInstruments = DefaultMaxInstruments,
+            int maxAttributes = DefaultMaxAttributes)
         {
+            if (maxInstruments <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxInstruments));
+            }
+
+            if (maxAttributes <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxAttributes));
+            }
+
+            this.maxInstruments = maxInstruments;
+            preparedAttributes = new EventTag[maxAttributes];
             pendingStartUnixNano = startTimeUnixNano;
         }
 
@@ -168,7 +193,12 @@ namespace Unimetry.Internal
                     StartTimeUnixNano = pendingStartUnixNano,
                     TimeUnixNano = timeUnixNano,
                     Metrics = new List<MetricSnapshot>(),
+                    InstrumentLimitReached = instrumentLimitPending,
+                    AttributeLimitReached = attributeLimitPending,
                 };
+
+                instrumentLimitPending = false;
+                attributeLimitPending = false;
 
                 foreach (var pair in seriesByName)
                 {
@@ -211,6 +241,9 @@ namespace Unimetry.Internal
                 {
                     pendingStartUnixNano = batch.StartTimeUnixNano;
                 }
+
+                instrumentLimitPending |= batch.InstrumentLimitReached;
+                attributeLimitPending |= batch.AttributeLimitReached;
 
                 for (var index = 0; index < batch.Metrics.Count; index++)
                 {
@@ -374,10 +407,16 @@ namespace Unimetry.Internal
                 }
             }
 
-            if (seriesCount >= MaxInstruments)
+            if (seriesCount >= maxInstruments)
             {
                 // Keep known series active and drop measurements that would create
                 // a new series after the global cardinality limit is reached.
+                if (!instrumentLimitReported)
+                {
+                    instrumentLimitReported = true;
+                    instrumentLimitPending = true;
+                }
+
                 return null;
             }
 
@@ -441,6 +480,11 @@ namespace Unimetry.Internal
                 else if (count < preparedAttributes.Length)
                 {
                     preparedAttributes[count++] = tag;
+                }
+                else if (!attributeLimitReported)
+                {
+                    attributeLimitReported = true;
+                    attributeLimitPending = true;
                 }
             }
 

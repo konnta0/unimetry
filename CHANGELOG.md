@@ -4,6 +4,11 @@ Notable changes to Unimetry are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added configurable `MaxInstruments` and `MaxAttributes` limits to `UnimetryOptions` and `UnimetrySettings`, retaining the previous defaults of 128 time series and four attributes per measurement.
+- Added one-shot built-in counters for the first instrument-series and attribute limit overflow in each initialization. Failed exports retry the pending notification, and `CaptureBuiltInMetrics` opts out of these counters.
+
 ## [0.9.1] - 2026-11-06
 
 ### Changed

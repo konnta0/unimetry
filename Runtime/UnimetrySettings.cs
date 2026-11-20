@@ -37,8 +37,14 @@ namespace Unimetry
         /// <summary>Export application metrics and enabled built-in metrics.</summary>
         public bool CaptureMetrics = true;
 
-        /// <summary>Collect and export built-in FPS, memory, and startup gauges.</summary>
+        /// <summary>Collect and export built-in gauges and one-shot metric-limit counters.</summary>
         public bool CaptureBuiltInMetrics = true;
+
+        /// <summary>Maximum number of application metric time series retained per initialization.</summary>
+        public int MaxInstruments = 128;
+
+        /// <summary>Maximum number of unique attributes retained for each metric measurement.</summary>
+        public int MaxAttributes = 4;
 
         /// <summary>Builds runtime options from this asset.</summary>
         /// <returns>Options ready for <see cref="UnimetryClient.Initialize"/>.</returns>
@@ -56,6 +62,8 @@ namespace Unimetry
                 CaptureMinidumps = CaptureMinidumps,
                 CaptureMetrics = CaptureMetrics,
                 CaptureBuiltInMetrics = CaptureBuiltInMetrics,
+                MaxInstruments = MaxInstruments,
+                MaxAttributes = MaxAttributes,
             };
         }
     }

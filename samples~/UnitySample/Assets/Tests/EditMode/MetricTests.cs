@@ -165,7 +165,7 @@ namespace Unimetry.Tests
         public void SeriesLimit_DropsNewSeriesAndKeepsExistingSeriesActive()
         {
             var buffer = new MetricBuffer(100);
-            for (var index = 0; index < MetricBuffer.MaxInstruments + 1; index++)
+            for (var index = 0; index < MetricBuffer.DefaultMaxInstruments + 1; index++)
             {
                 buffer.AddCounter(
                     "game.match.started",
@@ -181,10 +181,86 @@ namespace Unimetry.Tests
                 new[] { new MetricAttribute("match", 0) });
 
             var batch = buffer.Collect(200);
-            Assert.AreEqual(MetricBuffer.MaxInstruments, batch.Metrics.Count);
+            Assert.AreEqual(MetricBuffer.DefaultMaxInstruments, batch.Metrics.Count);
             Assert.AreEqual(2d, FindByIntAttribute(batch, "match", 0).Sum);
-            Assert.AreEqual(1d, FindByIntAttribute(batch, "match", MetricBuffer.MaxInstruments - 1).Sum);
-            Assert.IsNull(FindByIntAttribute(batch, "match", MetricBuffer.MaxInstruments));
+            Assert.AreEqual(1d, FindByIntAttribute(batch, "match", MetricBuffer.DefaultMaxInstruments - 1).Sum);
+            Assert.IsNull(FindByIntAttribute(batch, "match", MetricBuffer.DefaultMaxInstruments));
+            Assert.IsTrue(batch.InstrumentLimitReached);
+        }
+
+        [Test]
+        public void ConfiguredInstrumentLimit_ReportsOncePerBufferAndRetriesFailedNotification()
+        {
+            var buffer = new MetricBuffer(100, maxInstruments: 1, maxAttributes: 4);
+            buffer.AddCounter("game.first", 1, null);
+            buffer.AddCounter("game.second", 1, null);
+            buffer.AddCounter("game.third", 1, null);
+
+            var failed = buffer.Collect(200);
+            Assert.IsTrue(failed.InstrumentLimitReached);
+            Assert.AreEqual(1, failed.Metrics.Count);
+
+            buffer.Requeue(failed);
+            var retry = buffer.Collect(300);
+            Assert.IsTrue(retry.InstrumentLimitReached);
+
+            buffer.AddCounter("game.fourth", 1, null);
+            var afterDelivery = buffer.Collect(400);
+            Assert.IsFalse(afterDelivery.InstrumentLimitReached);
+            Assert.IsTrue(afterDelivery.IsEmpty);
+        }
+
+        [Test]
+        public void ConfiguredAttributeLimit_RetainsPrefixAndReportsOncePerBuffer()
+        {
+            var buffer = new MetricBuffer(100, maxInstruments: 8, maxAttributes: 2);
+            var attributes = new[]
+            {
+                new MetricAttribute("a", 1),
+                new MetricAttribute("b", 2),
+                new MetricAttribute("c", 3),
+            };
+
+            buffer.AddCounter("game.attributes", 1, null, attributes);
+            var first = buffer.Collect(200);
+            Assert.IsTrue(first.AttributeLimitReached);
+            Assert.AreEqual(2, Find(first, "game.attributes").AttributeCount);
+
+            buffer.AddCounter("game.attributes", 1, null, attributes);
+            var second = buffer.Collect(300);
+            Assert.IsFalse(second.AttributeLimitReached);
+            Assert.AreEqual(2, Find(second, "game.attributes").AttributeCount);
+        }
+
+        [Test]
+        public void BuildMetricsPayload_ExportsLimitCountersOnlyWhenBuiltInsAreEnabled()
+        {
+            var buffer = new MetricBuffer(100, maxInstruments: 1, maxAttributes: 1);
+            buffer.AddCounter(
+                "game.first",
+                1,
+                null,
+                new[] { new MetricAttribute("a", 1), new MetricAttribute("b", 2) });
+            buffer.AddCounter("game.second", 1, null);
+            var batch = buffer.Collect(200);
+            var enabled = new UnimetryOptions { Endpoint = "http://127.0.0.1:9" };
+            var disabled = new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                CaptureBuiltInMetrics = false,
+            };
+
+            var enabledPayload = OtlpJsonWriter.BuildMetricsPayload(
+                null, enabled, 200, double.NaN, -1, double.NaN, batch);
+            var disabledPayload = OtlpJsonWriter.BuildMetricsPayload(
+                null, disabled, 200, double.NaN, -1, double.NaN, batch);
+
+            Assert.AreEqual(1, CountOccurrences(enabledPayload, MetricBuffer.InstrumentLimitMetricName));
+            Assert.AreEqual(1, CountOccurrences(enabledPayload, MetricBuffer.AttributeLimitMetricName));
+            StringAssert.Contains("\"asInt\":\"1\"", enabledPayload);
+            StringAssert.DoesNotContain(MetricBuffer.InstrumentLimitMetricName, disabledPayload);
+            StringAssert.DoesNotContain(MetricBuffer.AttributeLimitMetricName, disabledPayload);
+            StringAssert.Contains("\"name\":\"game.first\"", disabledPayload);
         }
 
         [Test]
@@ -335,6 +411,19 @@ namespace Unimetry.Tests
             }
 
             return null;
+        }
+
+        private static int CountOccurrences(string text, string value)
+        {
+            var count = 0;
+            var index = 0;
+            while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += value.Length;
+            }
+
+            return count;
         }
     }
 }

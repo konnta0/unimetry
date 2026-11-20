@@ -147,6 +147,49 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void MetricLimits_HaveDocumentedDefaultsAndMapFromSettings()
+        {
+            var options = new UnimetryOptions();
+            Assert.AreEqual(128, options.MaxInstruments);
+            Assert.AreEqual(4, options.MaxAttributes);
+
+            var settings = ScriptableObject.CreateInstance<UnimetrySettings>();
+            try
+            {
+                Assert.AreEqual(128, settings.ToOptions().MaxInstruments);
+                Assert.AreEqual(4, settings.ToOptions().MaxAttributes);
+                settings.MaxInstruments = 32;
+                settings.MaxAttributes = 8;
+                Assert.AreEqual(32, settings.ToOptions().MaxInstruments);
+                Assert.AreEqual(8, settings.ToOptions().MaxAttributes);
+            }
+            finally
+            {
+                Object.DestroyImmediate(settings);
+            }
+        }
+
+        [TestCase(0, 4, "MaxInstruments")]
+        [TestCase(-1, 4, "MaxInstruments")]
+        [TestCase(128, 0, "MaxAttributes")]
+        [TestCase(128, -1, "MaxAttributes")]
+        public void MetricLimits_MustBeGreaterThanZero(
+            int maxInstruments,
+            int maxAttributes,
+            string expectedMessage)
+        {
+            var options = new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                MaxInstruments = maxInstruments,
+                MaxAttributes = maxAttributes,
+            };
+
+            var exception = Assert.Throws<System.InvalidOperationException>(() => options.Validate());
+            StringAssert.Contains(expectedMessage, exception.Message);
+        }
+
+        [Test]
         public void OfflineProtector_RoundTripsQueueJson()
         {
             var directory = Path.Combine(Application.temporaryCachePath, "unimetry-offline-" + System.Guid.NewGuid().ToString("N"));

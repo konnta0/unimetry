@@ -33,7 +33,10 @@ namespace Unimetry.Internal
             queue = new PersistentQueue(options.MaxQueueSize);
             exporter = new OtlpExporter(options);
             eventBuffer = new EventBuffer(options.MaxEventBuffer, resourceState, options.Sanitizer);
-            metricBuffer = new MetricBuffer(EventClock.UnixNano());
+            metricBuffer = new MetricBuffer(
+                EventClock.UnixNano(),
+                options.MaxInstruments,
+                options.MaxAttributes);
             var root = Path.Combine(Application.persistentDataPath, "unimetry");
             crashStore = new CrashArtifactStore(Path.Combine(root, "crashes"));
             breadcrumbs = new BreadcrumbLog(
