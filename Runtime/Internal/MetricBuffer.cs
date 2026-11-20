@@ -35,7 +35,8 @@ namespace Unimetry.Internal
         public bool AttributeLimitReached;
 
         public bool HasApplicationMetrics => Metrics != null && Metrics.Count > 0;
-        public bool IsEmpty => !HasApplicationMetrics && !InstrumentLimitReached && !AttributeLimitReached;
+        public bool HasLimitMetrics => InstrumentLimitReached || AttributeLimitReached;
+        public bool IsEmpty => !HasApplicationMetrics && !HasLimitMetrics;
     }
 
     internal sealed class MetricBuffer

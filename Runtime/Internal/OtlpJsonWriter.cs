@@ -449,7 +449,7 @@ namespace Unimetry.Internal
                 AppendGauge(builder, "unity.startup.duration_s", startupSeconds, timeUnixNano, ref written);
             }
 
-            if (options.CaptureBuiltInMetrics && metricBatch != null)
+            if (options.CaptureMetricLimitCounters && metricBatch != null)
             {
                 if (metricBatch.InstrumentLimitReached)
                 {

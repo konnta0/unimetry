@@ -233,7 +233,7 @@ namespace Unimetry.Tests
         }
 
         [Test]
-        public void BuildMetricsPayload_ExportsLimitCountersOnlyWhenBuiltInsAreEnabled()
+        public void BuildMetricsPayload_LimitCounterSwitchIsIndependentOfBuiltInGauges()
         {
             var buffer = new MetricBuffer(100, maxInstruments: 1, maxAttributes: 1);
             buffer.AddCounter(
@@ -243,23 +243,30 @@ namespace Unimetry.Tests
                 new[] { new MetricAttribute("a", 1), new MetricAttribute("b", 2) });
             buffer.AddCounter("game.second", 1, null);
             var batch = buffer.Collect(200);
-            var enabled = new UnimetryOptions { Endpoint = "http://127.0.0.1:9" };
-            var disabled = new UnimetryOptions
+            var enabled = new UnimetryOptions
             {
                 Endpoint = "http://127.0.0.1:9",
                 CaptureBuiltInMetrics = false,
             };
+            var disabled = new UnimetryOptions
+            {
+                Endpoint = "http://127.0.0.1:9",
+                CaptureBuiltInMetrics = true,
+                CaptureMetricLimitCounters = false,
+            };
 
             var enabledPayload = OtlpJsonWriter.BuildMetricsPayload(
-                null, enabled, 200, double.NaN, -1, double.NaN, batch);
+                null, enabled, 200, 59.5, 4096, 1.25, batch);
             var disabledPayload = OtlpJsonWriter.BuildMetricsPayload(
-                null, disabled, 200, double.NaN, -1, double.NaN, batch);
+                null, disabled, 200, 59.5, 4096, 1.25, batch);
 
             Assert.AreEqual(1, CountOccurrences(enabledPayload, MetricBuffer.InstrumentLimitMetricName));
             Assert.AreEqual(1, CountOccurrences(enabledPayload, MetricBuffer.AttributeLimitMetricName));
             StringAssert.Contains("\"asInt\":\"1\"", enabledPayload);
+            StringAssert.DoesNotContain("\"name\":\"unity.fps\"", enabledPayload);
             StringAssert.DoesNotContain(MetricBuffer.InstrumentLimitMetricName, disabledPayload);
             StringAssert.DoesNotContain(MetricBuffer.AttributeLimitMetricName, disabledPayload);
+            StringAssert.Contains("\"name\":\"unity.fps\"", disabledPayload);
             StringAssert.Contains("\"name\":\"game.first\"", disabledPayload);
         }
 

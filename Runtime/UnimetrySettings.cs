@@ -37,8 +37,11 @@ namespace Unimetry
         /// <summary>Export application metrics and enabled built-in metrics.</summary>
         public bool CaptureMetrics = true;
 
-        /// <summary>Collect and export built-in gauges and one-shot metric-limit counters.</summary>
+        /// <summary>Collect and export built-in FPS, memory, and startup gauges.</summary>
         public bool CaptureBuiltInMetrics = true;
+
+        /// <summary>Export one-shot counters when application metric limits are exceeded.</summary>
+        public bool CaptureMetricLimitCounters = true;
 
         /// <summary>Maximum number of application metric time series retained per initialization.</summary>
         public int MaxInstruments = 128;
@@ -62,6 +65,7 @@ namespace Unimetry
                 CaptureMinidumps = CaptureMinidumps,
                 CaptureMetrics = CaptureMetrics,
                 CaptureBuiltInMetrics = CaptureBuiltInMetrics,
+                CaptureMetricLimitCounters = CaptureMetricLimitCounters,
                 MaxInstruments = MaxInstruments,
                 MaxAttributes = MaxAttributes,
             };

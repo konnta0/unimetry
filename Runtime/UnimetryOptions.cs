@@ -96,11 +96,16 @@ namespace Unimetry
         public bool CaptureMetrics { get; set; } = true;
 
         /// <summary>
-        /// When true, Unimetry collects and exports its built-in FPS, managed memory, and startup gauges,
-        /// plus one-shot metric-limit counters.
-        /// Disable this to stop all built-in metric measurements without disabling application metrics.
+        /// When true, Unimetry collects and exports its built-in FPS, managed memory, and startup gauges.
+        /// Disable this to stop those measurements without disabling application metrics or limit counters.
         /// </summary>
         public bool CaptureBuiltInMetrics { get; set; } = true;
+
+        /// <summary>
+        /// When true, Unimetry exports one-shot counters when the application metric time-series
+        /// or per-measurement attribute limit is exceeded. This is independent of built-in gauges.
+        /// </summary>
+        public bool CaptureMetricLimitCounters { get; set; } = true;
 
         /// <summary>
         /// Maximum number of application metric time series retained per initialization.

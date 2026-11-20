@@ -147,6 +147,27 @@ namespace Unimetry.Tests
         }
 
         [Test]
+        public void Settings_MapsMetricLimitCounterOptOutIndependently()
+        {
+            var options = new UnimetryOptions();
+            Assert.IsTrue(options.CaptureMetricLimitCounters);
+
+            var settings = ScriptableObject.CreateInstance<UnimetrySettings>();
+            try
+            {
+                Assert.IsTrue(settings.ToOptions().CaptureMetricLimitCounters);
+                settings.CaptureBuiltInMetrics = false;
+                Assert.IsTrue(settings.ToOptions().CaptureMetricLimitCounters);
+                settings.CaptureMetricLimitCounters = false;
+                Assert.IsFalse(settings.ToOptions().CaptureMetricLimitCounters);
+            }
+            finally
+            {
+                Object.DestroyImmediate(settings);
+            }
+        }
+
+        [Test]
         public void MetricLimits_HaveDocumentedDefaultsAndMapFromSettings()
         {
             var options = new UnimetryOptions();

@@ -4,6 +4,10 @@ Notable changes to Unimetry are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added `CaptureMetricLimitCounters` to `UnimetryOptions` and `UnimetrySettings`. It defaults to enabled and independently controls the one-shot metric-limit counters without affecting the built-in Unity gauges or application metrics.
+
 ## [0.10.0] - 2026-11-20
 
 ### Added

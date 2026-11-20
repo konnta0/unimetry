@@ -49,6 +49,7 @@ namespace Unimetry.Editor
             EditorGUILayout.PropertyField(serialized.FindProperty("CaptureMinidumps"));
             EditorGUILayout.PropertyField(serialized.FindProperty("CaptureMetrics"));
             EditorGUILayout.PropertyField(serialized.FindProperty("CaptureBuiltInMetrics"));
+            EditorGUILayout.PropertyField(serialized.FindProperty("CaptureMetricLimitCounters"));
             EditorGUILayout.PropertyField(serialized.FindProperty("MaxInstruments"));
             EditorGUILayout.PropertyField(serialized.FindProperty("MaxAttributes"));
             serialized.ApplyModifiedProperties();
